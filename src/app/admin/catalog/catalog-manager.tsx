@@ -32,6 +32,7 @@ export type CatalogMachine = {
   imageUrl: string | null;
   active: boolean;
   sortOrder: number;
+  variants: Array<{ id: string; variantType: "AUTOMATIC" | "SEMI_AUTOMATIC"; displayName: string; price: number | null; active: boolean; sortOrder: number }>;
 };
 
 export type CatalogAddon = {
@@ -218,6 +219,7 @@ function MachineEditor({
               <option value="SHIPPING_ONLY">Solo envío</option>
             </select>
           </label>
+          {machine?.variants.length ? <section className="mt-6 border-t border-border pt-6"><p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">Versiones</p><div className="mt-4 grid gap-4 md:grid-cols-2">{machine.variants.map((variant) => <div className="rounded-2xl border border-border bg-surface-muted/50 p-4" key={variant.id}><input name="variantIds" type="hidden" value={variant.id} /><p className="font-bold text-foreground">{variant.displayName}</p><label className="mt-3 grid gap-2"><FieldLabel>Precio</FieldLabel><input className="min-h-11 rounded-xl border border-border bg-surface px-3" defaultValue={variant.price ?? ""} min="0.01" name={`variantPrice:${variant.id}`} placeholder="Sin precio" step="0.01" type="number" /></label><ToggleField defaultChecked={variant.active} description="Solo puede estar disponible con precio válido." name={`variantActive:${variant.id}`} title="Disponible" /></div>)}</div></section> : null}
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">

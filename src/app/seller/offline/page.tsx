@@ -1,11 +1,11 @@
 import { OfflineQuoteList } from "@/components/offline-quote-list";
 import { SellerOfflineProvider } from "@/components/seller-offline-provider";
 import { SellerShellHeader } from "@/components/seller-shell-header";
-import { requireRole } from "@/lib/auth/require-role";
+import { requireSellerFlowRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function SellerOfflinePage() {
-  const profile = await requireRole("seller");
+  const profile = await requireSellerFlowRole();
   const supabase = await createClient();
   const { data: claimsData } = await supabase.auth.getClaims();
   const sellerId = typeof claimsData?.claims.sub === "string" ? claimsData.claims.sub : null;

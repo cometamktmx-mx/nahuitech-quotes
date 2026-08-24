@@ -41,6 +41,8 @@ export async function syncPendingOfflineQuotes(sellerId: string) {
         clientGeneratedId: quote.clientGeneratedId,
         clientGeneratedFolio: quote.folio,
         machineImageUrlSnapshot: quote.pdfSnapshot.machine.imageUrl,
+        machineVariantId: quote.machineVariantId,
+        salespersonId: quote.salespersonId ?? null,
       });
 
       if (result.quoteId && result.folio && result.total !== undefined) {

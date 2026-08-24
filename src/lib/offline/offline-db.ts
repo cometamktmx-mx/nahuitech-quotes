@@ -7,8 +7,10 @@ import type {
   OfflineCustomer,
   OfflineMachine,
   OfflineMachineAddon,
+  OfflineMachineVariant,
   OfflineMetadata,
   OfflineQuote,
+  OfflineSalesperson,
   OfflineSellerProfile,
   OfflineWhatsAppTask,
   SyncQueueEntry,
@@ -18,9 +20,11 @@ class NahuitechOfflineDatabase extends Dexie {
   machines!: Table<OfflineMachine, string>;
   addons!: Table<OfflineAddon, string>;
   machineAddons!: Table<OfflineMachineAddon, [string, string]>;
+  machineVariants!: Table<OfflineMachineVariant, string>;
   coupons!: Table<OfflineCoupon, string>;
   couponMachines!: Table<OfflineCouponMachine, [string, string]>;
   sellerProfiles!: Table<OfflineSellerProfile, string>;
+  salespeople!: Table<OfflineSalesperson, string>;
   offlineCustomers!: Table<OfflineCustomer, string>;
   offlineQuotes!: Table<OfflineQuote, string>;
   syncQueue!: Table<SyncQueueEntry, string>;
@@ -68,6 +72,37 @@ class NahuitechOfflineDatabase extends Dexie {
       sellerProfiles: "&id",
       offlineCustomers: "&localId, sellerId, createdAt",
       offlineQuotes: "&localId, &clientGeneratedId, sellerId, syncStatus, createdAt, remoteId",
+      syncQueue: "&localId, quoteLocalId, sellerId, updatedAt",
+      offlineWhatsAppTasks: "&localId, &quoteLocalId, sellerId, status, updatedAt",
+      metadata: "&key, updatedAt",
+    });
+
+    this.version(4).stores({
+      machines: "&id, slug, sortOrder",
+      addons: "&id",
+      machineAddons: "[machineId+addonId], machineId, addonId",
+      machineVariants: "&id, machineId, active, sortOrder",
+      coupons: "&id, &code",
+      couponMachines: "[couponId+machineId], couponId, machineId",
+      sellerProfiles: "&id",
+      offlineCustomers: "&localId, sellerId, createdAt",
+      offlineQuotes: "&localId, &clientGeneratedId, sellerId, sellerResponsibleId, syncStatus, createdAt, remoteId",
+      syncQueue: "&localId, quoteLocalId, sellerId, updatedAt",
+      offlineWhatsAppTasks: "&localId, &quoteLocalId, sellerId, status, updatedAt",
+      metadata: "&key, updatedAt",
+    });
+
+    this.version(5).stores({
+      machines: "&id, slug, sortOrder",
+      addons: "&id",
+      machineAddons: "[machineId+addonId], machineId, addonId",
+      machineVariants: "&id, machineId, active, sortOrder",
+      coupons: "&id, &code",
+      couponMachines: "[couponId+machineId], couponId, machineId",
+      sellerProfiles: "&id",
+      salespeople: "&id, active, sortOrder",
+      offlineCustomers: "&localId, sellerId, createdAt",
+      offlineQuotes: "&localId, &clientGeneratedId, sellerId, salespersonId, syncStatus, createdAt, remoteId",
       syncQueue: "&localId, quoteLocalId, sellerId, updatedAt",
       offlineWhatsAppTasks: "&localId, &quoteLocalId, sellerId, status, updatedAt",
       metadata: "&key, updatedAt",

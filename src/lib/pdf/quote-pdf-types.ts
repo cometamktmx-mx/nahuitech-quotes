@@ -31,6 +31,7 @@ export type QuotePdfSnapshot = {
     basePrice: number;
     numberOfBases: number | null;
     imageUrl: string | null;
+    variant: { type: "AUTOMATIC" | "SEMI_AUTOMATIC"; name: string; price: number } | null;
   };
   addons: QuotePdfAddon[];
   subtotal: number;

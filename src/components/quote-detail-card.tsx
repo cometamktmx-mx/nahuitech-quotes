@@ -22,6 +22,9 @@ type QuoteSnapshot = {
   machineBasePrice: number;
   machineNumberOfBases: number | null;
   machineImageUrl: string | null;
+  machineVariantType: "AUTOMATIC" | "SEMI_AUTOMATIC" | null;
+  machineVariantName: string | null;
+  machineVariantPrice: number | null;
   deliveryType: "SHIPPING" | "INSTALLATION" | "LATER";
   deliveryNote: string | null;
   subtotal: number;
@@ -157,6 +160,7 @@ export function QuoteDetailCard({
       basePrice: quote.machineBasePrice,
       numberOfBases: quote.machineNumberOfBases,
       imageUrl: quote.machineImageUrl,
+      variant: quote.machineVariantType && quote.machineVariantName && quote.machineVariantPrice !== null ? { type: quote.machineVariantType, name: quote.machineVariantName, price: quote.machineVariantPrice } : null,
     },
     addons: addons.map((addon) => ({
       id: addon.id,

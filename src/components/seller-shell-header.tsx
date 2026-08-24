@@ -4,6 +4,7 @@ import { BrandMark } from "@/components/ui";
 
 import { SellerSessionControls } from "./seller-session-controls";
 import { SellerOfflineStatus } from "./seller-offline-status";
+import { SellerAttendingControl } from "./seller-attending-control";
 
 export function SellerShellHeader({ userName }: { userName: string }) {
   return (
@@ -19,10 +20,7 @@ export function SellerShellHeader({ userName }: { userName: string }) {
 
         <div className="flex flex-wrap items-center justify-between gap-4 sm:justify-end">
           <SellerOfflineStatus />
-          <div className="min-w-0 text-right">
-            <p className="truncate text-sm font-bold text-on-graphite">{userName}</p>
-            <p className="text-xs text-on-graphite-muted">Vendedor</p>
-          </div>
+          <SellerAttendingControl userName={userName} />
           <SellerSessionControls />
         </div>
       </div>

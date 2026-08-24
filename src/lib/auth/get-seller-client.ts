@@ -16,7 +16,12 @@ export async function getSellerClient() {
     .eq("id", userId)
     .maybeSingle();
 
-  if (profileError || !profile || !profile.active || profile.role !== "seller") {
+  if (
+    profileError ||
+    !profile ||
+    !profile.active ||
+    (profile.role !== "seller" && profile.role !== "expo")
+  ) {
     throw new Error("No autorizado.");
   }
 

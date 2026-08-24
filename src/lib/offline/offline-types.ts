@@ -1,5 +1,5 @@
 import type { QuotePdfSnapshot } from "@/lib/pdf/quote-pdf-types";
-import type { SellerAddon, SellerMachine } from "@/lib/seller-catalog";
+import type { SellerAddon, SellerMachine, SellerMachineVariant } from "@/lib/seller-catalog";
 
 export type OfflineMachine = SellerMachine & {
   active: boolean;
@@ -39,10 +39,27 @@ export type OfflineCouponMachine = {
 export type OfflineSellerProfile = {
   id: string;
   fullName: string;
-  role: "seller";
+  role: "seller" | "expo";
   active: boolean;
+  salespersonId: string | null;
   syncedAt: string;
 };
+
+export type OfflineSalesperson = {
+  id: string;
+  fullName: string;
+  active: boolean;
+  sortOrder: number;
+};
+
+export type OfflineSelectedSalesperson = {
+  accountId: string;
+  salespersonId: string;
+  salespersonName: string;
+  updatedAt: string;
+};
+
+export type OfflineMachineVariant = SellerMachineVariant;
 
 export type OfflineMetadata = {
   key: string;
@@ -70,6 +87,11 @@ export type OfflineQuote = {
   customerLocalId: string;
   folio: string;
   machineId: string;
+  salespersonId: string | null;
+  salespersonNameSnapshot: string | null;
+  /** Legacy Expo selector value kept so quotes saved before the migration can sync. */
+  sellerResponsibleId?: string;
+  machineVariantId: string | null;
   /** Legacy field retained so previously saved device quotes can still sync. */
   selectedAddonIds?: string[];
   selectedAddonQuantities: Record<string, number>;

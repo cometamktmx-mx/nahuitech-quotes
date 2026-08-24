@@ -1,13 +1,14 @@
 import { SellerMachineCard } from "@/components/seller-machine-card";
+import { ExpoSellerSelector } from "@/components/expo-seller-selector";
 import { SellerOfflineMode } from "@/components/seller-offline-mode";
 import { SellerOfflineProvider } from "@/components/seller-offline-provider";
 import { SellerShellHeader } from "@/components/seller-shell-header";
-import { requireRole } from "@/lib/auth/require-role";
+import { requireSellerFlowRole } from "@/lib/auth/require-role";
 import { asCatalogNumber, type SellerMachine } from "@/lib/seller-catalog";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function SellerPage() {
-  const profile = await requireRole("seller");
+  const profile = await requireSellerFlowRole();
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("machines")
@@ -37,7 +38,7 @@ export default async function SellerPage() {
 
   const { data: recentQuoteRows, error: recentQuotesError } = await supabase
     .from("quotes")
-    .select("id, folio, customer_id, machine_name_snapshot, total, status, created_at")
+    .select("id, folio, customer_id, salesperson_name_snapshot, machine_name_snapshot, total, status, created_at")
     .order("created_at", { ascending: false })
     .limit(5);
 
@@ -61,6 +62,7 @@ export default async function SellerPage() {
     id: quote.id,
     folio: quote.folio,
     customerName: customerNames.get(quote.customer_id) ?? "Cliente",
+    salespersonName: quote.salesperson_name_snapshot ?? "Vendedor",
     machineName: quote.machine_name_snapshot,
     total: asCatalogNumber(quote.total),
     status: quote.status,
@@ -70,10 +72,20 @@ export default async function SellerPage() {
     }).format(new Date(quote.created_at)),
   }));
 
+  const { data: salespeople } = profile.role === "expo"
+    ? await supabase
+        .from("salespeople")
+        .select("id, full_name, sort_order")
+        .eq("active", true)
+        .order("sort_order")
+        .order("full_name")
+    : { data: [] };
+
   return (
     <SellerOfflineProvider>
       <div className="min-h-screen bg-background">
         <SellerShellHeader userName={profile.full_name} />
+        <ExpoSellerSelector salespeople={(salespeople ?? []).map((salesperson) => ({ id: salesperson.id, fullName: salesperson.full_name }))}>
         <main className="mx-auto grid max-w-7xl gap-8 px-5 py-8 md:px-8 md:py-12">
         <header className="max-w-3xl">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Cotizador Expo</p>
@@ -97,6 +109,7 @@ export default async function SellerPage() {
           ) : <p className="mt-5 rounded-2xl bg-surface-muted px-4 py-5 text-sm text-muted">Aún no tienes cotizaciones creadas.</p>}
         </section>
         </main>
+        </ExpoSellerSelector>
         <SellerOfflineMode />
       </div>
     </SellerOfflineProvider>

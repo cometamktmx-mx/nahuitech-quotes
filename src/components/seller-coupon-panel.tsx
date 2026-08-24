@@ -26,6 +26,7 @@ const currencyFormatter = new Intl.NumberFormat("es-MX", {
 export function SellerCouponPanel({
   machineId,
   addonQuantities,
+  machineVariantId,
   couponCode,
   appliedCoupon,
   onCouponCodeChange,
@@ -33,6 +34,7 @@ export function SellerCouponPanel({
 }: {
   machineId: string;
   addonQuantities: Record<string, number>;
+  machineVariantId: string | null;
   couponCode: string;
   appliedCoupon: AppliedCoupon | null;
   onCouponCodeChange: (value: string) => void;
@@ -50,15 +52,15 @@ export function SellerCouponPanel({
 
     try {
       result = offline && !offline.isOnline
-        ? await previewOfflineCoupon({ machineId, addonQuantities, couponCode })
-        : await validateCoupon({ machineId, addonQuantities, couponCode });
+        ? await previewOfflineCoupon({ machineId, addonQuantities, couponCode, machineVariantId })
+        : await validateCoupon({ machineId, addonQuantities, couponCode, machineVariantId });
 
       if (result.error && result.retryable) {
-        result = await previewOfflineCoupon({ machineId, addonQuantities, couponCode });
+        result = await previewOfflineCoupon({ machineId, addonQuantities, couponCode, machineVariantId });
       }
     } catch (error) {
       try {
-        result = await previewOfflineCoupon({ machineId, addonQuantities, couponCode });
+        result = await previewOfflineCoupon({ machineId, addonQuantities, couponCode, machineVariantId });
       } catch {
         setIsApplying(false);
         onAppliedCoupon(null);

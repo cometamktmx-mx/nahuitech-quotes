@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 
-import type { SellerAddon, SellerMachine } from "@/lib/seller-catalog";
+import type { SellerAddon, SellerMachine, SellerMachineVariant } from "@/lib/seller-catalog";
 import { createOfflineQuote } from "@/lib/offline/offline-quotes";
 import type { OfflineQuote } from "@/lib/offline/offline-types";
 import {
@@ -286,16 +286,20 @@ function QuoteSummary({
 export function SellerQuoteConfigurator({
   machine,
   addons,
+  variants = [],
   onChangeMachine,
   onViewPending,
 }: {
   machine: SellerMachine;
   addons: SellerAddon[];
+  variants?: SellerMachineVariant[];
   onChangeMachine?: () => void;
   onViewPending?: () => void;
 }) {
   const router = useRouter();
   const offline = useSellerOffline();
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
+  const selectedVariant = variants.find((variant) => variant.id === selectedVariantId) ?? null;
   const [step, setStep] = useState<QuoteStep>(machine.supportsAddons ? "configure" : "details");
   const [selectedAddonQuantities, setSelectedAddonQuantities] = useState<Record<string, number>>(() =>
     Object.fromEntries(addons.filter((addon) => addon.required).map((addon) => [addon.id, 1]))
@@ -314,8 +318,9 @@ export function SellerQuoteConfigurator({
   const [createdLocalQuote, setCreatedLocalQuote] = useState<OfflineQuote | null>(null);
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
+  const quotedMachine = selectedVariant?.price !== null && selectedVariant?.price !== undefined ? { ...machine, basePrice: selectedVariant.price } : machine;
   const selectedAddons = addons.filter((addon) => (selectedAddonQuantities[addon.id] ?? 0) > 0);
-  const subtotal = machine.basePrice + selectedAddons.reduce((sum, addon) => sum + quoteAddonTotal(addon, machine, selectedAddonQuantities[addon.id]), 0);
+  const subtotal = quotedMachine.basePrice + selectedAddons.reduce((sum, addon) => sum + quoteAddonTotal(addon, quotedMachine, selectedAddonQuantities[addon.id]), 0);
   const total = subtotal - (appliedCoupon?.discountAmount ?? 0);
 
   function moveTo(nextStep: QuoteStep) {
@@ -337,6 +342,25 @@ export function SellerQuoteConfigurator({
   function handleCouponCodeChange(value: string) {
     setCouponCode(value);
     setAppliedCoupon(null);
+  }
+
+  if (offline?.accountRole === "expo" && !offline.salespersonId) {
+    return <main className="mx-auto grid max-w-2xl gap-5 px-5 py-12 text-center"><p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Cuenta Expo</p><h1 className="text-3xl font-black text-foreground">Selecciona quién está atendiendo antes de cotizar.</h1><Link className={primaryButtonClass} href="/seller">Elegir vendedor</Link></main>;
+  }
+
+  if (variants.length > 0 && !selectedVariant) {
+    return (
+      <main className="mx-auto grid max-w-5xl gap-7 px-5 py-8 md:px-8 md:py-12">
+        <header><p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Versión</p><h1 className="mt-3 text-3xl font-black tracking-[-0.04em] text-foreground sm:text-4xl">¿Qué versión necesita tu cliente?</h1><p className="mt-3 text-muted">{machine.name}</p></header>
+        <section className="grid gap-5 md:grid-cols-2">
+          {variants.map((variant) => {
+            const available = variant.active && variant.price !== null && variant.price > 0;
+            return <button className={available ? "min-h-48 rounded-3xl border border-border bg-surface p-6 text-left shadow-[var(--shadow-card)] active:scale-[0.99]" : "min-h-48 rounded-3xl border border-border bg-surface-muted p-6 text-left opacity-60"} disabled={!available} key={variant.id} onClick={() => setSelectedVariantId(variant.id)} type="button"><p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">{variant.variantType === "AUTOMATIC" ? "AUTOMÁTICA" : "SEMIAUTOMÁTICA"}</p><p className="mt-4 text-2xl font-black text-foreground">{variant.displayName}</p><p className="mt-6 text-xl font-black text-foreground">{available ? `${currencyFormatter.format(variant.price ?? 0)} MXN` : "Precio pendiente"}</p></button>;
+          })}
+        </section>
+        <Link className={secondaryButtonClass} href="/seller">Cambiar máquina</Link>
+      </main>
+    );
   }
 
   function handleDetailsSubmit(event: FormEvent<HTMLFormElement>) {
@@ -381,8 +405,10 @@ export function SellerQuoteConfigurator({
 
     try {
       const quote = await createOfflineQuote({
-        sellerId: offline.sellerId,
+        sellerId: offline.sellerId!,
+        salespersonId: offline.salespersonId,
         machineId: machine.id,
+        machineVariantId: selectedVariant?.id ?? null,
         addonQuantities: selectedAddonQuantities,
         customerName: customer.name,
         customerCompany: customer.company,
@@ -421,6 +447,9 @@ export function SellerQuoteConfigurator({
         customerEmail: customer.email,
         deliveryType: deliveryTypes[delivery],
         couponCode: appliedCoupon?.couponCode ?? "",
+        machineImageUrlSnapshot: machine.imageUrl,
+        machineVariantId: selectedVariant?.id ?? null,
+        salespersonId: offline?.salespersonId ?? null,
       });
 
       if (result.error || !result.quoteId || !result.folio || result.total === undefined) {
@@ -480,7 +509,7 @@ export function SellerQuoteConfigurator({
         </section>
       </div>
 
-      <QuoteSummary compact coupon={appliedCoupon} customer={customer} delivery={delivery} machine={machine} selectedAddonQuantities={selectedAddonQuantities} selectedAddons={selectedAddons} />
+      <QuoteSummary compact coupon={appliedCoupon} customer={customer} delivery={delivery} machine={quotedMachine} selectedAddonQuantities={selectedAddonQuantities} selectedAddons={selectedAddons} />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start">
         <div className="min-w-0">
@@ -489,7 +518,7 @@ export function SellerQuoteConfigurator({
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">Configuración</p>
               <h2 className="mt-3 text-2xl font-black tracking-[-0.03em] text-foreground sm:text-3xl">Elige los add-ons para esta máquina</h2>
               <p className="mt-3 text-base leading-7 text-muted">Los precios se actualizan inmediatamente. La entrega se cotiza después.</p>
-              <div className="mt-6 grid gap-4 md:grid-cols-2">{addons.map((addon) => <AddonCard addon={addon} key={addon.id} machine={machine} onQuantityChange={(quantity) => setAddonQuantity(addon, quantity)} selectedQuantity={selectedAddonQuantities[addon.id] ?? 0} />)}</div>
+              <div className="mt-6 grid gap-4 md:grid-cols-2">{addons.map((addon) => <AddonCard addon={addon} key={addon.id} machine={quotedMachine} onQuantityChange={(quantity) => setAddonQuantity(addon, quantity)} selectedQuantity={selectedAddonQuantities[addon.id] ?? 0} />)}</div>
               <div className="mt-7 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between"><Link className={secondaryButtonClass} href="/seller">Atrás</Link><button className={primaryButtonClass} onClick={() => moveTo("details")} type="button">Continuar con datos y entrega <span aria-hidden="true">→</span></button></div>
             </section>
           ) : null}
@@ -545,7 +574,7 @@ export function SellerQuoteConfigurator({
           ) : null}
         </div>
 
-        <aside className="grid gap-4 lg:sticky lg:top-6"><QuoteSummary coupon={appliedCoupon} customer={customer} delivery={delivery} machine={machine} selectedAddonQuantities={selectedAddonQuantities} selectedAddons={selectedAddons} /><SellerCouponPanel addonQuantities={selectedAddonQuantities} appliedCoupon={appliedCoupon} couponCode={couponCode} machineId={machine.id} onAppliedCoupon={setAppliedCoupon} onCouponCodeChange={handleCouponCodeChange} /></aside>
+        <aside className="grid gap-4 lg:sticky lg:top-6"><QuoteSummary coupon={appliedCoupon} customer={customer} delivery={delivery} machine={quotedMachine} selectedAddonQuantities={selectedAddonQuantities} selectedAddons={selectedAddons} /><SellerCouponPanel addonQuantities={selectedAddonQuantities} appliedCoupon={appliedCoupon} couponCode={couponCode} machineId={machine.id} machineVariantId={selectedVariant?.id ?? null} onAppliedCoupon={setAppliedCoupon} onCouponCodeChange={handleCouponCodeChange} /></aside>
       </div>
     </main>
   );

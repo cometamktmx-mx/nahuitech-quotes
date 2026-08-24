@@ -8,7 +8,9 @@ import type { OfflineCustomer, OfflineQuote, SyncQueueEntry } from "./offline-ty
 
 type OfflineQuoteInput = {
   sellerId: string;
+  salespersonId: string | null;
   machineId: string;
+  machineVariantId: string | null;
   addonQuantities: Record<string, number>;
   customerName: string;
   customerCompany: string;
@@ -99,16 +101,26 @@ function validateDeliveryPolicy(
   }
 }
 
-async function loadOfflineConfiguration(machineId: string, addonQuantities: Record<string, number>) {
-  const [machine, relations] = await Promise.all([
+async function loadOfflineConfiguration(machineId: string, addonQuantities: Record<string, number>, machineVariantId: string | null = null) {
+  const [machine, relations, variants] = await Promise.all([
     offlineDb.machines.get(machineId),
     offlineDb.machineAddons.where("machineId").equals(machineId).toArray(),
+    offlineDb.machineVariants.where("machineId").equals(machineId).toArray(),
   ]);
 
   if (!machine || !machine.active) {
     throw new OfflineQuoteValidationError("La máquina no está disponible en el catálogo local.");
   }
 
+  const hasVariants = variants.length > 0;
+  const variant = machineVariantId ? variants.find((candidate) => candidate.id === machineVariantId) ?? null : null;
+  if (hasVariants && (!variant || !variant.active || variant.price === null || variant.price <= 0)) {
+    throw new OfflineQuoteValidationError("La versión seleccionada no está disponible en el catálogo local.");
+  }
+  if (!hasVariants && machineVariantId) throw new OfflineQuoteValidationError("Esta máquina no tiene versiones.");
+  const configuredMachine = variant
+    ? { ...machine, basePrice: variant.price ?? machine.basePrice }
+    : machine;
   const addonIds = addonIdsFromQuantities(addonQuantities);
   const addons = await offlineDb.addons.bulkGet(addonIds);
   const activeAddons = addons.filter((addon): addon is NonNullable<typeof addon> => Boolean(addon?.active));
@@ -119,8 +131,9 @@ async function loadOfflineConfiguration(machineId: string, addonQuantities: Reco
   );
 
   return {
-    machine,
-    configuration: calculateConfiguration(machine, activeAddons, addonQuantities, compatibleRelations),
+    machine: configuredMachine,
+    variant,
+    configuration: calculateConfiguration(configuredMachine, activeAddons, addonQuantities, compatibleRelations),
   };
 }
 
@@ -128,12 +141,13 @@ export async function previewOfflineCoupon({
   machineId,
   addonQuantities,
   couponCode,
-}: Pick<OfflineQuoteInput, "machineId" | "addonQuantities" | "couponCode">) {
+  machineVariantId,
+}: Pick<OfflineQuoteInput, "machineId" | "addonQuantities" | "couponCode" | "machineVariantId">) {
   const normalizedCode = couponCode.trim().toUpperCase();
   if (!normalizedCode) throw new OfflineQuoteValidationError("Ingresa un código de cupón.");
 
   const [{ machine, configuration }, storedCoupon] = await Promise.all([
-    loadOfflineConfiguration(machineId, addonQuantities),
+    loadOfflineConfiguration(machineId, addonQuantities, machineVariantId),
     offlineDb.coupons.where("code").equals(normalizedCode).first(),
   ]);
 
@@ -166,16 +180,48 @@ export async function previewOfflineCoupon({
 export async function createOfflineQuote(input: OfflineQuoteInput) {
   const [profile, loadedConfiguration] = await Promise.all([
     offlineDb.sellerProfiles.get(input.sellerId),
-    loadOfflineConfiguration(input.machineId, input.addonQuantities),
+    loadOfflineConfiguration(input.machineId, input.addonQuantities, input.machineVariantId),
   ]);
 
-  if (!profile || !profile.active || profile.role !== "seller") {
+  if (!profile || !profile.active || (profile.role !== "seller" && profile.role !== "expo")) {
     throw new OfflineQuoteValidationError(
       "Necesitas una sesión de vendedor preparada en este dispositivo para cotizar sin conexión."
     );
   }
 
   const { machine, configuration } = loadedConfiguration;
+  const variant = loadedConfiguration.variant;
+  let salespersonId: string | null = null;
+  let salespersonName: string;
+
+  if (profile.role === "expo") {
+    if (!input.salespersonId) {
+      throw new OfflineQuoteValidationError("Selecciona quién está atendiendo antes de cotizar.");
+    }
+
+    const selectedSalesperson = await offlineDb.salespeople.get(input.salespersonId);
+    if (!selectedSalesperson?.active) {
+      throw new OfflineQuoteValidationError("El vendedor seleccionado no está disponible en este dispositivo.");
+    }
+
+    salespersonId = selectedSalesperson.id;
+    salespersonName = selectedSalesperson.fullName;
+  } else if (profile.salespersonId) {
+    if (input.salespersonId && input.salespersonId !== profile.salespersonId) {
+      throw new OfflineQuoteValidationError("La cuenta de vendedor solo puede usar su vendedor comercial vinculado.");
+    }
+
+    const linkedSalesperson = await offlineDb.salespeople.get(profile.salespersonId);
+    if (!linkedSalesperson?.active) {
+      throw new OfflineQuoteValidationError("El vendedor comercial vinculado no está disponible en este dispositivo.");
+    }
+
+    salespersonId = linkedSalesperson.id;
+    salespersonName = linkedSalesperson.fullName;
+  } else {
+    // Keep an old individual seller usable until an admin links a salesperson.
+    salespersonName = profile.fullName;
+  }
   validateDeliveryPolicy(machine, input.deliveryType);
 
   let coupon = null;
@@ -221,12 +267,13 @@ export async function createOfflineQuote(input: OfflineQuoteInput) {
       whatsapp: customer.whatsapp,
       email: customer.email,
     },
-    sellerName: profile.fullName,
+    sellerName: salespersonName,
     machine: {
       name: machine.name,
       basePrice: machine.basePrice,
       numberOfBases: machine.numberOfBases,
       imageUrl: machine.imageUrl,
+      variant: variant ? { type: variant.variantType, name: variant.displayName, price: variant.price! } : null,
     },
     addons: configuration.quoteAddons,
     subtotal: configuration.subtotal,
@@ -246,6 +293,9 @@ export async function createOfflineQuote(input: OfflineQuoteInput) {
     customerLocalId: customer.localId,
     folio: pdfSnapshot.folio,
     machineId: machine.id,
+    salespersonId,
+    salespersonNameSnapshot: salespersonName,
+    machineVariantId: variant?.id ?? null,
     selectedAddonQuantities: { ...input.addonQuantities },
     couponCode: coupon?.code ?? null,
     deliveryType: input.deliveryType,

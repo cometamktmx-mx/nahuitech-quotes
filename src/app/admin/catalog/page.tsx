@@ -16,7 +16,7 @@ function asNumber(value: unknown) {
 export default async function AdminCatalogPage() {
   const profile = await requireRole("admin");
   const supabase = await createClient();
-  const [machinesResult, addonsResult, relationsResult] = await Promise.all([
+  const [machinesResult, addonsResult, relationsResult, variantsResult] = await Promise.all([
     supabase
       .from("machines")
       .select(
@@ -29,13 +29,20 @@ export default async function AdminCatalogPage() {
       .select("id, name, description, unit_price, calculation_type, required, active")
       .order("name"),
     supabase.from("machine_addons").select("machine_id, addon_id, unit_price_override, description_override"),
+    supabase.from("machine_variants").select("id, machine_id, variant_type, display_name, price, active, sort_order").order("sort_order"),
   ]);
 
-  if (machinesResult.error || addonsResult.error || relationsResult.error) {
+  if (machinesResult.error || addonsResult.error || relationsResult.error || variantsResult.error) {
     throw new Error("No se pudo cargar el catálogo.");
   }
 
   const machineIdsByAddon = new Map<string, CatalogAddon["compatibilities"]>();
+  const variantsByMachine = new Map<string, CatalogMachine["variants"]>();
+  for (const variant of variantsResult.data ?? []) {
+    const variants = variantsByMachine.get(variant.machine_id) ?? [];
+    variants.push({ id: variant.id, variantType: variant.variant_type, displayName: variant.display_name, price: variant.price === null ? null : asNumber(variant.price), active: variant.active, sortOrder: variant.sort_order });
+    variantsByMachine.set(variant.machine_id, variants);
+  }
 
   for (const relation of relationsResult.data ?? []) {
     const relations = machineIdsByAddon.get(relation.addon_id) ?? [];
@@ -59,6 +66,7 @@ export default async function AdminCatalogPage() {
     imageUrl: machine.image_url,
     active: machine.active,
     sortOrder: machine.sort_order,
+    variants: variantsByMachine.get(machine.id) ?? [],
   }));
   const addons: CatalogAddon[] = (addonsResult.data ?? []).map((addon) => ({
     id: addon.id,

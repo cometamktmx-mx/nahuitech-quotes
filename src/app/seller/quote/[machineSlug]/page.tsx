@@ -3,11 +3,12 @@ import { notFound } from "next/navigation";
 import { SellerQuoteConfigurator } from "@/components/seller-quote-configurator";
 import { SellerOfflineProvider } from "@/components/seller-offline-provider";
 import { SellerShellHeader } from "@/components/seller-shell-header";
-import { requireRole } from "@/lib/auth/require-role";
+import { requireSellerFlowRole } from "@/lib/auth/require-role";
 import {
   asCatalogNumber,
   type SellerAddon,
   type SellerMachine,
+  type SellerMachineVariant,
 } from "@/lib/seller-catalog";
 import { createClient } from "@/lib/supabase/server";
 
@@ -18,7 +19,7 @@ type SellerQuotePageProps = {
 export default async function SellerQuotePage({ params }: SellerQuotePageProps) {
   const [{ machineSlug }, profile] = await Promise.all([
     params,
-    requireRole("seller"),
+    requireSellerFlowRole(),
   ]);
   const supabase = await createClient();
   const { data: machine, error: machineError } = await supabase
@@ -101,11 +102,31 @@ export default async function SellerQuotePage({ params }: SellerQuotePageProps) 
     throw new Error("La máquina necesita número de bases para sus add-ons PER_BASE.");
   }
 
+  const { data: variantRows, error: variantsError } = await supabase
+    .from("machine_variants")
+    .select("id, machine_id, variant_type, display_name, price, active, sort_order")
+    .eq("machine_id", selectedMachine.id)
+    .order("sort_order");
+
+  if (variantsError) {
+    throw new Error("No se pudieron cargar las versiones de la máquina.");
+  }
+
+  const variants: SellerMachineVariant[] = (variantRows ?? []).map((variant) => ({
+    id: variant.id,
+    machineId: variant.machine_id,
+    variantType: variant.variant_type,
+    displayName: variant.display_name,
+    price: variant.price === null ? null : asCatalogNumber(variant.price),
+    active: variant.active,
+    sortOrder: variant.sort_order,
+  }));
+
   return (
     <SellerOfflineProvider>
       <div className="min-h-screen bg-background">
         <SellerShellHeader userName={profile.full_name} />
-        <SellerQuoteConfigurator addons={addons} machine={selectedMachine} />
+        <SellerQuoteConfigurator addons={addons} machine={selectedMachine} variants={variants} />
       </div>
     </SellerOfflineProvider>
   );

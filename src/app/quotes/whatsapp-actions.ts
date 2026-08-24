@@ -112,7 +112,7 @@ async function getAuthorizedQuote(quoteId: string): Promise<AuthorizedQuote> {
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("role, active")
+    .select("role, active, salesperson_id")
     .eq("id", userId)
     .maybeSingle();
 
@@ -127,11 +127,17 @@ async function getAuthorizedQuote(quoteId: string): Promise<AuthorizedQuote> {
 
   const { data: quote, error: quoteError } = await supabase
     .from("quotes")
-    .select("id, folio, customer_id, seller_id")
+    .select("id, folio, customer_id, seller_id, salesperson_id")
     .eq("id", quoteId)
     .maybeSingle();
 
-  if (quoteError || !quote || (profile.role === "seller" && quote.seller_id !== userId)) {
+  if (
+    quoteError ||
+    !quote ||
+    (profile.role === "seller" &&
+      quote.seller_id !== userId &&
+      (!profile.salesperson_id || quote.salesperson_id !== profile.salesperson_id))
+  ) {
     throw new Error("No tienes acceso a esta cotización.");
   }
 
@@ -149,7 +155,7 @@ async function loadQuoteSnapshot(quoteId: string): Promise<QuotePdfSnapshot> {
   const { data: quote, error: quoteError } = await supabase
     .from("quotes")
     .select(
-      "folio, customer_id, seller_id, machine_name_snapshot, machine_base_price_snapshot, machine_number_of_bases_snapshot, machine_image_url_snapshot, delivery_type, delivery_note, subtotal, discount_amount, coupon_code_snapshot, coupon_name_snapshot, coupon_discount_type_snapshot, coupon_discount_value_snapshot, notes, total, created_at"
+      "folio, customer_id, salesperson_name_snapshot, machine_name_snapshot, machine_base_price_snapshot, machine_number_of_bases_snapshot, machine_image_url_snapshot, machine_variant_type_snapshot, machine_variant_name_snapshot, machine_variant_price_snapshot, delivery_type, delivery_note, subtotal, discount_amount, coupon_code_snapshot, coupon_name_snapshot, coupon_discount_type_snapshot, coupon_discount_value_snapshot, notes, total, created_at"
     )
     .eq("id", quoteId)
     .maybeSingle();
@@ -158,16 +164,11 @@ async function loadQuoteSnapshot(quoteId: string): Promise<QuotePdfSnapshot> {
     throw new Error("No se pudo cargar la cotización para WhatsApp.");
   }
 
-  const [customerResult, sellerResult, addonsResult] = await Promise.all([
+  const [customerResult, addonsResult] = await Promise.all([
     supabase
       .from("customers")
       .select("name, company, whatsapp, email")
       .eq("id", quote.customer_id)
-      .maybeSingle(),
-    supabase
-      .from("profiles")
-      .select("full_name")
-      .eq("id", quote.seller_id)
       .maybeSingle(),
     supabase
       .from("quote_addons")
@@ -176,7 +177,7 @@ async function loadQuoteSnapshot(quoteId: string): Promise<QuotePdfSnapshot> {
       .order("created_at"),
   ]);
 
-  if (customerResult.error || sellerResult.error || addonsResult.error || !customerResult.data) {
+  if (customerResult.error || addonsResult.error || !customerResult.data) {
     throw new Error("No se pudieron cargar los snapshots de la cotización.");
   }
 
@@ -188,12 +189,13 @@ async function loadQuoteSnapshot(quoteId: string): Promise<QuotePdfSnapshot> {
     folio: quote.folio,
     createdAt: quote.created_at,
     customer: customerResult.data,
-    sellerName: sellerResult.data?.full_name ?? null,
+    sellerName: quote.salesperson_name_snapshot ?? null,
     machine: {
       name: quote.machine_name_snapshot,
       basePrice: asNumber(quote.machine_base_price_snapshot),
       numberOfBases: quote.machine_number_of_bases_snapshot,
       imageUrl: quote.machine_image_url_snapshot,
+      variant: quote.machine_variant_type_snapshot && quote.machine_variant_name_snapshot && quote.machine_variant_price_snapshot !== null ? { type: quote.machine_variant_type_snapshot, name: quote.machine_variant_name_snapshot, price: asNumber(quote.machine_variant_price_snapshot) } : null,
     },
     addons: (addonsResult.data ?? []).map((addon) => ({
       id: addon.id,

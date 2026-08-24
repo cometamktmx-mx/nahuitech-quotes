@@ -233,6 +233,7 @@ export async function saveMachine(
       sort_order: nonNegativeInteger(formData.get("sortOrder"), "El orden"),
     };
     const supabase = await getAdminClient();
+    let savedMachineId = id;
 
     if (!["FLEXIBLE", "INSTALLATION_REQUIRED", "SHIPPING_ONLY"].includes(payload.delivery_policy)) {
       throw new ValidationError("La política de entrega no es válida.");
@@ -249,12 +250,25 @@ export async function saveMachine(
       if (error || !data) {
         throw new Error("No se pudo actualizar la máquina.");
       }
+      savedMachineId = data.id;
     } else {
-      const { error } = await supabase.from("machines").insert(payload);
+      const { data, error } = await supabase.from("machines").insert(payload).select("id").single();
 
-      if (error) {
+      if (error || !data) {
         throw new Error("No se pudo crear la máquina.");
       }
+      savedMachineId = data.id;
+    }
+
+    for (const value of formData.getAll("variantIds")) {
+      const variantId = assertUuid(value);
+      const priceText = optionalText(formData.get(`variantPrice:${variantId}`));
+      const active = formData.get(`variantActive:${variantId}`) === "on";
+      if (active && !priceText) throw new ValidationError("Asigna un precio antes de activar una versión.");
+      const price = priceText ? nonNegativePrice(priceText, "El precio de la versión") : null;
+      if (price !== null && Number(price) <= 0) throw new ValidationError("El precio de la versión debe ser mayor que cero.");
+      const { error } = await supabase.from("machine_variants").update({ price, active }).eq("id", variantId).eq("machine_id", savedMachineId!);
+      if (error) throw new Error("No se pudo guardar una versión de máquina.");
     }
 
     revalidatePath("/admin/catalog");

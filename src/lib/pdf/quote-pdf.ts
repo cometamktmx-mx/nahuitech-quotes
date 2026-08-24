@@ -488,6 +488,15 @@ function drawMachine(context: DrawingContext, snapshot: QuotePdfSnapshot) {
       color: rgbFromHex(context.pdf, quotePdfBrand.muted),
     });
   }
+  if (snapshot.machine.variant) {
+    context.page.drawText(`Versión: ${snapshot.machine.variant.name}`, {
+      x: textStart,
+      y: boxBottom + (snapshot.machine.numberOfBases !== null ? 2 : 13),
+      size: 7.5,
+      font: context.regular,
+      color: rgbFromHex(context.pdf, quotePdfBrand.muted),
+    });
+  }
   const price = asMoney(snapshot.machine.basePrice);
   context.page.drawText(price, {
     x: pageWidth - margin - 12 - context.bold.widthOfTextAtSize(price, 12),

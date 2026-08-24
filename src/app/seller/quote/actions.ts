@@ -19,6 +19,8 @@ type CreateQuoteInput = {
   clientGeneratedId?: string;
   clientGeneratedFolio?: string;
   machineImageUrlSnapshot?: string | null;
+  machineVariantId?: string | null;
+  salespersonId?: string | null;
 };
 
 export type CreateQuoteResult = {
@@ -123,6 +125,14 @@ function validateInput(input: CreateQuoteInput) {
     throw new ValidationError("El identificador local de la cotización no es válido.");
   }
 
+  if (input.machineVariantId && !uuidPattern.test(input.machineVariantId)) {
+    throw new ValidationError("La versión seleccionada no es válida.");
+  }
+
+  if (input.salespersonId && !uuidPattern.test(input.salespersonId)) {
+    throw new ValidationError("El vendedor seleccionado no es válido.");
+  }
+
   if (
     input.clientGeneratedFolio &&
     !/^NH-[0-9]{6}-[A-F0-9]{6}$/.test(input.clientGeneratedFolio)
@@ -145,23 +155,18 @@ async function loadCreatedQuotePdfSnapshot(
   const { data: quote, error: quoteError } = await supabase
     .from("quotes")
     .select(
-      "folio, customer_id, seller_id, machine_name_snapshot, machine_base_price_snapshot, machine_number_of_bases_snapshot, machine_image_url_snapshot, delivery_type, delivery_note, subtotal, discount_amount, coupon_code_snapshot, coupon_name_snapshot, coupon_discount_type_snapshot, coupon_discount_value_snapshot, notes, total, created_at"
+      "folio, customer_id, salesperson_name_snapshot, machine_name_snapshot, machine_base_price_snapshot, machine_number_of_bases_snapshot, machine_image_url_snapshot, machine_variant_type_snapshot, machine_variant_name_snapshot, machine_variant_price_snapshot, delivery_type, delivery_note, subtotal, discount_amount, coupon_code_snapshot, coupon_name_snapshot, coupon_discount_type_snapshot, coupon_discount_value_snapshot, notes, total, created_at"
     )
     .eq("id", quoteId)
     .maybeSingle();
 
   if (quoteError || !quote) return undefined;
 
-  const [customerResult, sellerResult, addonsResult] = await Promise.all([
+  const [customerResult, addonsResult] = await Promise.all([
     supabase
       .from("customers")
       .select("name, company, whatsapp, email")
       .eq("id", quote.customer_id)
-      .maybeSingle(),
-    supabase
-      .from("profiles")
-      .select("full_name")
-      .eq("id", quote.seller_id)
       .maybeSingle(),
     supabase
       .from("quote_addons")
@@ -172,7 +177,7 @@ async function loadCreatedQuotePdfSnapshot(
       .order("created_at"),
   ]);
 
-  if (customerResult.error || sellerResult.error || addonsResult.error || !customerResult.data) {
+  if (customerResult.error || addonsResult.error || !customerResult.data) {
     return undefined;
   }
 
@@ -188,12 +193,13 @@ async function loadCreatedQuotePdfSnapshot(
     folio: quote.folio,
     createdAt: quote.created_at,
     customer: customerResult.data,
-    sellerName: sellerResult.data?.full_name ?? null,
+    sellerName: quote.salesperson_name_snapshot ?? null,
     machine: {
       name: quote.machine_name_snapshot,
       basePrice: asNumber(quote.machine_base_price_snapshot),
       numberOfBases: quote.machine_number_of_bases_snapshot,
       imageUrl: quote.machine_image_url_snapshot,
+      variant: quote.machine_variant_type_snapshot && quote.machine_variant_name_snapshot && quote.machine_variant_price_snapshot !== null ? { type: quote.machine_variant_type_snapshot, name: quote.machine_variant_name_snapshot, price: asNumber(quote.machine_variant_price_snapshot) } : null,
     },
     addons: (addonsResult.data ?? []).map((addon) => ({
       id: addon.id,
@@ -229,7 +235,7 @@ async function loadCreatedQuotePdfSnapshot(
 }
 
 export async function validateCoupon(
-  input: Pick<CreateQuoteInput, "machineId" | "addonQuantities" | "couponCode">
+  input: Pick<CreateQuoteInput, "machineId" | "addonQuantities" | "couponCode" | "machineVariantId">
 ): Promise<CouponPreviewResult> {
   try {
     validateConfiguration(input.machineId, input.addonQuantities);
@@ -248,6 +254,7 @@ export async function validateCoupon(
       p_machine_id: input.machineId,
       p_addon_quantities: input.addonQuantities,
       p_coupon_code: couponCode,
+      p_machine_variant_id: input.machineVariantId ?? null,
     });
     const preview = Array.isArray(data) ? data[0] : null;
 
@@ -311,6 +318,8 @@ export async function createQuote(
       p_client_generated_id: input.clientGeneratedId ?? null,
       p_client_generated_folio: input.clientGeneratedFolio ?? null,
       p_machine_image_url_snapshot: validateMachineImageUrlSnapshot(input.machineImageUrlSnapshot),
+      p_machine_variant_id: input.machineVariantId ?? null,
+      p_salesperson_id: input.salespersonId ?? null,
     });
 
     const quote = Array.isArray(data) ? data[0] : null;

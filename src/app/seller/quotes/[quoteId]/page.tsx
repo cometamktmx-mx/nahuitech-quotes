@@ -3,9 +3,14 @@ import { notFound } from "next/navigation";
 import { QuoteDetailCard } from "@/components/quote-detail-card";
 import { SellerShellHeader } from "@/components/seller-shell-header";
 import { SellerOfflineProvider } from "@/components/seller-offline-provider";
-import { requireRole } from "@/lib/auth/require-role";
+import { requireSellerFlowRole } from "@/lib/auth/require-role";
 import { asCatalogNumber } from "@/lib/seller-catalog";
 import { createClient } from "@/lib/supabase/server";
+
+function asNumber(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
 
 type SellerQuoteDetailPageProps = {
   params: Promise<{ quoteId: string }>;
@@ -16,13 +21,13 @@ export default async function SellerQuoteDetailPage({
 }: SellerQuoteDetailPageProps) {
   const [{ quoteId }, profile] = await Promise.all([
     params,
-    requireRole("seller"),
+    requireSellerFlowRole(),
   ]);
   const supabase = await createClient();
   const { data: quote, error: quoteError } = await supabase
     .from("quotes")
     .select(
-      "folio, customer_id, status, machine_name_snapshot, machine_base_price_snapshot, machine_number_of_bases_snapshot, machine_image_url_snapshot, delivery_type, delivery_note, subtotal, discount_amount, coupon_code_snapshot, coupon_name_snapshot, coupon_discount_type_snapshot, coupon_discount_value_snapshot, notes, total, created_at"
+      "folio, customer_id, salesperson_name_snapshot, status, machine_name_snapshot, machine_base_price_snapshot, machine_number_of_bases_snapshot, machine_image_url_snapshot, machine_variant_type_snapshot, machine_variant_name_snapshot, machine_variant_price_snapshot, delivery_type, delivery_note, subtotal, discount_amount, coupon_code_snapshot, coupon_name_snapshot, coupon_discount_type_snapshot, coupon_discount_value_snapshot, notes, total, created_at"
     )
     .eq("id", quoteId)
     .maybeSingle();
@@ -93,6 +98,9 @@ export default async function SellerQuoteDetailPage({
           machineBasePrice: asCatalogNumber(quote.machine_base_price_snapshot),
           machineNumberOfBases: quote.machine_number_of_bases_snapshot,
           machineImageUrl: quote.machine_image_url_snapshot,
+          machineVariantType: quote.machine_variant_type_snapshot,
+          machineVariantName: quote.machine_variant_name_snapshot,
+          machineVariantPrice: quote.machine_variant_price_snapshot === null ? null : asNumber(quote.machine_variant_price_snapshot),
           deliveryType: quote.delivery_type,
           deliveryNote: quote.delivery_note,
           subtotal: asCatalogNumber(quote.subtotal),
@@ -104,6 +112,7 @@ export default async function SellerQuoteDetailPage({
           notes: quote.notes,
           total: asCatalogNumber(quote.total),
         }}
+        sellerName={quote.salesperson_name_snapshot ?? "Vendedor"}
         whatsapp={{
           quoteId,
           status: whatsappMessage?.status ?? null,

@@ -11,6 +11,16 @@ export type SellerMachine = {
   sortOrder: number;
 };
 
+export type SellerMachineVariant = {
+  id: string;
+  machineId: string;
+  variantType: "AUTOMATIC" | "SEMI_AUTOMATIC";
+  displayName: string;
+  price: number | null;
+  active: boolean;
+  sortOrder: number;
+};
+
 export type SellerAddon = {
   id: string;
   name: string;

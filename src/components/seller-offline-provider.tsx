@@ -8,21 +8,30 @@ import {
   getOfflineCatalogTimestamp,
   getOfflineSellerProfile,
   getOfflineSellerSession,
+  getOfflineSelectedSalesperson,
+  setOfflineSelectedSalesperson,
+  clearOfflineSelectedSalesperson,
   syncOfflineCatalog,
 } from "@/lib/offline/offline-catalog";
 import { getPendingOfflineQuoteCount } from "@/lib/offline/offline-quotes";
 import { syncPendingOfflineQuotes } from "@/lib/offline/sync-queue";
+import { offlineDb } from "@/lib/offline/offline-db";
 import { createClient } from "@/lib/supabase/client";
 
 type SellerOfflineState = {
   isOnline: boolean;
   sellerId: string | null;
   sellerName: string | null;
+  accountRole: "seller" | "expo" | null;
+  salespersonId: string | null;
+  salespersonName: string | null;
   lastSyncedAt: string | null;
   pendingQuoteCount: number;
   syncError: string | null;
   refreshOfflineState: () => Promise<void>;
   syncNow: () => Promise<void>;
+  selectSalesperson: (salespersonId: string, salespersonName: string) => Promise<void>;
+  clearSalesperson: () => Promise<void>;
 };
 
 const SellerOfflineContext = createContext<SellerOfflineState | null>(null);
@@ -85,6 +94,9 @@ export function SellerOfflineProvider({ children }: { children: ReactNode }) {
   const [isOnline, setIsOnline] = useState(true);
   const [sellerId, setSellerId] = useState<string | null>(null);
   const [sellerName, setSellerName] = useState<string | null>(null);
+  const [accountRole, setAccountRole] = useState<"seller" | "expo" | null>(null);
+  const [salespersonId, setSalespersonId] = useState<string | null>(null);
+  const [salespersonName, setSalespersonName] = useState<string | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [pendingQuoteCount, setPendingQuoteCount] = useState(0);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -103,6 +115,9 @@ export function SellerOfflineProvider({ children }: { children: ReactNode }) {
         void clearOfflineSellerSession().then(() => {
           setSellerId(null);
           setSellerName(null);
+          setAccountRole(null);
+          setSalespersonId(null);
+          setSalespersonName(null);
           setLastSyncedAt(null);
           setPendingQuoteCount(0);
         });
@@ -141,6 +156,9 @@ export function SellerOfflineProvider({ children }: { children: ReactNode }) {
 
     if (!currentSellerId) {
       setSellerName(null);
+      setAccountRole(null);
+      setSalespersonId(null);
+      setSalespersonName(null);
       setLastSyncedAt(null);
       setPendingQuoteCount(0);
       return;
@@ -152,9 +170,50 @@ export function SellerOfflineProvider({ children }: { children: ReactNode }) {
       getPendingOfflineQuoteCount(currentSellerId),
     ]);
     setSellerName(profile?.fullName ?? null);
+    const role = profile?.role ?? null;
+    setAccountRole(role);
+    if (role === "seller" && profile) {
+      const linkedSalesperson = profile.salespersonId
+        ? await offlineDb.salespeople.get(profile.salespersonId)
+        : null;
+      setSalespersonId(linkedSalesperson?.active ? linkedSalesperson.id : null);
+      setSalespersonName(linkedSalesperson?.active ? linkedSalesperson.fullName : profile.fullName);
+    } else if (role === "expo") {
+      const selected = await getOfflineSelectedSalesperson(currentSellerId);
+      if (selected) {
+        const selectedSalesperson = await offlineDb.salespeople.get(selected.salespersonId);
+        if (selectedSalesperson?.active) {
+          setSalespersonId(selectedSalesperson.id);
+          setSalespersonName(selectedSalesperson.fullName);
+        } else {
+          setSalespersonId(null);
+          setSalespersonName(null);
+        }
+      } else {
+        setSalespersonId(null);
+        setSalespersonName(null);
+      }
+    } else {
+      setSalespersonId(null);
+      setSalespersonName(null);
+    }
     setLastSyncedAt(syncedAt);
     setPendingQuoteCount(pendingCount);
   }, [getBrowserClient]);
+
+  const selectSalesperson = useCallback(async (selectedId: string, selectedName: string) => {
+    if (!sellerId || accountRole !== "expo") return;
+    await setOfflineSelectedSalesperson(sellerId, selectedId, selectedName);
+    setSalespersonId(selectedId);
+    setSalespersonName(selectedName);
+  }, [accountRole, sellerId]);
+
+  const clearSalesperson = useCallback(async () => {
+    if (!sellerId || accountRole !== "expo") return;
+    await clearOfflineSelectedSalesperson(sellerId);
+    setSalespersonId(null);
+    setSalespersonName(null);
+  }, [accountRole, sellerId]);
 
   const syncNow = useCallback(async () => {
     if (typeof navigator === "undefined" || !navigator.onLine) {
@@ -226,13 +285,18 @@ export function SellerOfflineProvider({ children }: { children: ReactNode }) {
       isOnline,
       sellerId,
       sellerName,
+      accountRole,
+      salespersonId,
+      salespersonName,
       lastSyncedAt,
       pendingQuoteCount,
       syncError,
       refreshOfflineState,
       syncNow,
+      selectSalesperson,
+      clearSalesperson,
     }),
-    [isOnline, lastSyncedAt, pendingQuoteCount, refreshOfflineState, sellerId, sellerName, syncError, syncNow]
+    [accountRole, clearSalesperson, isOnline, lastSyncedAt, pendingQuoteCount, refreshOfflineState, salespersonId, salespersonName, selectSalesperson, sellerId, sellerName, syncError, syncNow]
   );
 
   return <SellerOfflineContext.Provider value={value}>{children}</SellerOfflineContext.Provider>;

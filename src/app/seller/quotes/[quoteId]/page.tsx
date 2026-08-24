@@ -74,9 +74,9 @@ export default async function SellerQuoteDetailPage({
   }
 
   return (
-    <SellerOfflineProvider>
+    <SellerOfflineProvider initialAccountRole={profile.role}>
       <div className="min-h-screen bg-background">
-        <SellerShellHeader userName={profile.full_name} />
+        <SellerShellHeader accountRole={profile.role} userName={profile.full_name} />
         <QuoteDetailCard
         addons={(addonRows ?? []).map((addon) => ({
           id: addon.id,

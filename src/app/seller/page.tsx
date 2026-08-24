@@ -82,10 +82,10 @@ export default async function SellerPage() {
     : { data: [] };
 
   return (
-    <SellerOfflineProvider>
+    <SellerOfflineProvider initialAccountRole={profile.role}>
       <div className="min-h-screen bg-background">
-        <SellerShellHeader userName={profile.full_name} />
-        <ExpoSellerSelector salespeople={(salespeople ?? []).map((salesperson) => ({ id: salesperson.id, fullName: salesperson.full_name }))}>
+        <SellerShellHeader accountRole={profile.role} userName={profile.full_name} />
+        <ExpoSellerSelector isExpoAccount={profile.role === "expo"} salespeople={(salespeople ?? []).map((salesperson) => ({ id: salesperson.id, fullName: salesperson.full_name }))}>
         <main className="mx-auto grid max-w-7xl gap-8 px-5 py-8 md:px-8 md:py-12">
         <header className="max-w-3xl">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Cotizador Expo</p>

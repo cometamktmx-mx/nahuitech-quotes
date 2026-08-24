@@ -2,10 +2,25 @@
 
 import { useSellerOffline } from "./seller-offline-provider";
 
-export function SellerAttendingControl({ userName }: { userName: string }) {
+export function SellerAttendingControl({
+  userName,
+  accountRole,
+}: {
+  userName: string;
+  accountRole: "seller" | "expo";
+}) {
   const offline = useSellerOffline();
-  const name = offline?.salespersonName ?? userName;
-  const isExpo = offline?.accountRole === "expo";
+  const isExpo = accountRole === "expo";
+  const name = isExpo ? offline?.salespersonName ?? null : offline?.salespersonName ?? userName;
+
+  if (isExpo && !name) {
+    return (
+      <div className="min-w-0 text-right">
+        <p className="text-sm font-bold text-on-graphite">Terminal Expo</p>
+        <p className="mt-1 text-xs text-on-graphite-muted">Selecciona asesor</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-w-0 text-right">

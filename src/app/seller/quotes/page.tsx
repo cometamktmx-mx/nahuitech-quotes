@@ -35,9 +35,9 @@ export default async function SellerQuotesPage() {
   );
 
   return (
-    <SellerOfflineProvider>
+    <SellerOfflineProvider initialAccountRole={profile.role}>
       <div className="min-h-screen bg-background">
-        <SellerShellHeader userName={profile.full_name} />
+        <SellerShellHeader accountRole={profile.role} userName={profile.full_name} />
         <main className="mx-auto grid max-w-5xl gap-7 px-5 py-8 md:px-8 md:py-12">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>

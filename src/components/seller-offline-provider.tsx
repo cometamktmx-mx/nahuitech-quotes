@@ -19,9 +19,9 @@ import { offlineDb } from "@/lib/offline/offline-db";
 import { createClient } from "@/lib/supabase/client";
 
 type SellerOfflineState = {
+  isReady: boolean;
   isOnline: boolean;
   sellerId: string | null;
-  sellerName: string | null;
   accountRole: "seller" | "expo" | null;
   salespersonId: string | null;
   salespersonName: string | null;
@@ -30,7 +30,7 @@ type SellerOfflineState = {
   syncError: string | null;
   refreshOfflineState: () => Promise<void>;
   syncNow: () => Promise<void>;
-  selectSalesperson: (salespersonId: string, salespersonName: string) => Promise<void>;
+  selectSalesperson: (salespersonId: string) => Promise<void>;
   clearSalesperson: () => Promise<void>;
 };
 
@@ -90,11 +90,17 @@ async function cacheLoadedAppAssets() {
   }));
 }
 
-export function SellerOfflineProvider({ children }: { children: ReactNode }) {
+export function SellerOfflineProvider({
+  children,
+  initialAccountRole,
+}: {
+  children: ReactNode;
+  initialAccountRole?: "seller" | "expo";
+}) {
+  const [isReady, setIsReady] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [sellerId, setSellerId] = useState<string | null>(null);
-  const [sellerName, setSellerName] = useState<string | null>(null);
-  const [accountRole, setAccountRole] = useState<"seller" | "expo" | null>(null);
+  const [accountRole, setAccountRole] = useState<"seller" | "expo" | null>(initialAccountRole ?? null);
   const [salespersonId, setSalespersonId] = useState<string | null>(null);
   const [salespersonName, setSalespersonName] = useState<string | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
@@ -114,10 +120,10 @@ export function SellerOfflineProvider({ children }: { children: ReactNode }) {
 
         void clearOfflineSellerSession().then(() => {
           setSellerId(null);
-          setSellerName(null);
           setAccountRole(null);
           setSalespersonId(null);
           setSalespersonName(null);
+          setIsReady(false);
           setLastSyncedAt(null);
           setPendingQuoteCount(0);
         });
@@ -155,12 +161,12 @@ export function SellerOfflineProvider({ children }: { children: ReactNode }) {
     setSellerId(currentSellerId);
 
     if (!currentSellerId) {
-      setSellerName(null);
       setAccountRole(null);
       setSalespersonId(null);
       setSalespersonName(null);
       setLastSyncedAt(null);
       setPendingQuoteCount(0);
+      setIsReady(true);
       return;
     }
 
@@ -169,8 +175,7 @@ export function SellerOfflineProvider({ children }: { children: ReactNode }) {
       getOfflineCatalogTimestamp(currentSellerId),
       getPendingOfflineQuoteCount(currentSellerId),
     ]);
-    setSellerName(profile?.fullName ?? null);
-    const role = profile?.role ?? null;
+    const role = profile?.role ?? initialAccountRole ?? null;
     setAccountRole(role);
     if (role === "seller" && profile) {
       const linkedSalesperson = profile.salespersonId
@@ -199,14 +204,42 @@ export function SellerOfflineProvider({ children }: { children: ReactNode }) {
     }
     setLastSyncedAt(syncedAt);
     setPendingQuoteCount(pendingCount);
-  }, [getBrowserClient]);
+    setIsReady(true);
+  }, [getBrowserClient, initialAccountRole]);
 
-  const selectSalesperson = useCallback(async (selectedId: string, selectedName: string) => {
+  const selectSalesperson = useCallback(async (selectedId: string) => {
     if (!sellerId || accountRole !== "expo") return;
-    await setOfflineSelectedSalesperson(sellerId, selectedId, selectedName);
-    setSalespersonId(selectedId);
-    setSalespersonName(selectedName);
-  }, [accountRole, sellerId]);
+    let selectedSalesperson = await offlineDb.salespeople.get(selectedId);
+
+    if (!selectedSalesperson && typeof navigator !== "undefined" && navigator.onLine) {
+      const { data } = await getBrowserClient()
+        .from("salespeople")
+        .select("id, full_name, active, sort_order")
+        .eq("id", selectedId)
+        .eq("active", true)
+        .maybeSingle();
+
+      if (data) {
+        selectedSalesperson = {
+          id: data.id,
+          fullName: data.full_name,
+          active: data.active,
+          sortOrder: data.sort_order,
+        };
+        await offlineDb.salespeople.put(selectedSalesperson);
+      }
+    }
+
+    if (!selectedSalesperson?.active) return;
+
+    await setOfflineSelectedSalesperson(
+      sellerId,
+      selectedSalesperson.id,
+      selectedSalesperson.fullName
+    );
+    setSalespersonId(selectedSalesperson.id);
+    setSalespersonName(selectedSalesperson.fullName);
+  }, [accountRole, getBrowserClient, sellerId]);
 
   const clearSalesperson = useCallback(async () => {
     if (!sellerId || accountRole !== "expo") return;
@@ -283,8 +316,8 @@ export function SellerOfflineProvider({ children }: { children: ReactNode }) {
   const value = useMemo<SellerOfflineState>(
     () => ({
       isOnline,
+      isReady,
       sellerId,
-      sellerName,
       accountRole,
       salespersonId,
       salespersonName,
@@ -296,7 +329,7 @@ export function SellerOfflineProvider({ children }: { children: ReactNode }) {
       selectSalesperson,
       clearSalesperson,
     }),
-    [accountRole, clearSalesperson, isOnline, lastSyncedAt, pendingQuoteCount, refreshOfflineState, salespersonId, salespersonName, selectSalesperson, sellerId, sellerName, syncError, syncNow]
+    [accountRole, clearSalesperson, isOnline, isReady, lastSyncedAt, pendingQuoteCount, refreshOfflineState, salespersonId, salespersonName, selectSalesperson, sellerId, syncError, syncNow]
   );
 
   return <SellerOfflineContext.Provider value={value}>{children}</SellerOfflineContext.Provider>;

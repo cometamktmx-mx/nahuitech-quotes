@@ -6,16 +6,29 @@ type SalespersonOption = { id: string; fullName: string };
 
 export function ExpoSellerSelector({
   salespeople,
+  isExpoAccount,
   children,
 }: {
   salespeople: SalespersonOption[];
+  isExpoAccount: boolean;
   children: React.ReactNode;
 }) {
   const offline = useSellerOffline();
 
-  if (!offline || offline.accountRole !== "expo" || offline.salespersonId) {
+  if (!isExpoAccount) {
     return <>{children}</>;
   }
+
+  if (!offline || !offline.isReady) {
+    return (
+      <main className="mx-auto grid min-h-[calc(100vh-5rem)] max-w-5xl content-center gap-4 px-5 py-10 md:px-8">
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Terminal de expo</p>
+        <h1 className="text-3xl font-black tracking-[-0.04em] text-foreground">Preparando vendedores…</h1>
+      </main>
+    );
+  }
+
+  if (offline.salespersonId) return <>{children}</>;
 
   return (
     <main className="mx-auto grid min-h-[calc(100vh-5rem)] max-w-5xl content-center gap-7 px-5 py-10 md:px-8">
@@ -38,12 +51,7 @@ export function ExpoSellerSelector({
           <button
             className="flex min-h-32 flex-col justify-between rounded-3xl border border-border bg-surface p-6 text-left shadow-[var(--shadow-card)] transition active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             key={salesperson.id}
-            onClick={() =>
-              void offline.selectSalesperson(
-                salesperson.id,
-                salesperson.fullName
-              )
-            }
+            onClick={() => void offline.selectSalesperson(salesperson.id)}
             type="button"
           >
             <span className="text-xl font-black tracking-[-0.02em] text-foreground">

@@ -287,12 +287,14 @@ export function SellerQuoteConfigurator({
   machine,
   addons,
   variants = [],
+  isExpoAccount = false,
   onChangeMachine,
   onViewPending,
 }: {
   machine: SellerMachine;
   addons: SellerAddon[];
   variants?: SellerMachineVariant[];
+  isExpoAccount?: boolean;
   onChangeMachine?: () => void;
   onViewPending?: () => void;
 }) {
@@ -344,7 +346,7 @@ export function SellerQuoteConfigurator({
     setAppliedCoupon(null);
   }
 
-  if (offline?.accountRole === "expo" && !offline.salespersonId) {
+  if (isExpoAccount && (!offline || !offline.isReady || !offline.salespersonId)) {
     return <main className="mx-auto grid max-w-2xl gap-5 px-5 py-12 text-center"><p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Cuenta Expo</p><h1 className="text-3xl font-black text-foreground">Selecciona quién está atendiendo antes de cotizar.</h1><Link className={primaryButtonClass} href="/seller">Elegir vendedor</Link></main>;
   }
 

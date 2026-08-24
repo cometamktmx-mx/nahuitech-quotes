@@ -85,6 +85,10 @@ export function SellerOfflineMode() {
 
   if (!offline || isOnline) return null;
 
+  if (!offline.isReady) {
+    return <OfflineGate message="Preparando la sesión local de Expo..." />;
+  }
+
   if (!offline.sellerId) {
     return (
       <OfflineGate message="No hay una sesión local válida. Conéctate e inicia sesión antes de usar el cotizador sin conexión." />
@@ -121,12 +125,7 @@ export function SellerOfflineMode() {
               <button
                 className="min-h-28 rounded-3xl border border-border bg-surface p-5 text-left shadow-[var(--shadow-card)]"
                 key={salesperson.id}
-                onClick={() =>
-                  void offline.selectSalesperson(
-                    salesperson.id,
-                    salesperson.fullName
-                  )
-                }
+                onClick={() => void offline.selectSalesperson(salesperson.id)}
                 type="button"
               >
                 <p className="text-lg font-black text-foreground">

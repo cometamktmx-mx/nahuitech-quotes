@@ -15,9 +15,9 @@ export default async function SellerOfflinePage() {
   }
 
   return (
-    <SellerOfflineProvider>
+    <SellerOfflineProvider initialAccountRole={profile.role}>
       <div className="min-h-screen bg-background">
-        <SellerShellHeader userName={profile.full_name} />
+        <SellerShellHeader accountRole={profile.role} userName={profile.full_name} />
         <OfflineQuoteList sellerId={sellerId} />
       </div>
     </SellerOfflineProvider>

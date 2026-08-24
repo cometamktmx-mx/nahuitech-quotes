@@ -6,7 +6,13 @@ import { SellerSessionControls } from "./seller-session-controls";
 import { SellerOfflineStatus } from "./seller-offline-status";
 import { SellerAttendingControl } from "./seller-attending-control";
 
-export function SellerShellHeader({ userName }: { userName: string }) {
+export function SellerShellHeader({
+  userName,
+  accountRole,
+}: {
+  userName: string;
+  accountRole: "seller" | "expo";
+}) {
   return (
     <header className="border-b border-on-graphite/10 bg-graphite text-on-graphite">
       <div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between md:px-8">
@@ -20,7 +26,7 @@ export function SellerShellHeader({ userName }: { userName: string }) {
 
         <div className="flex flex-wrap items-center justify-between gap-4 sm:justify-end">
           <SellerOfflineStatus />
-          <SellerAttendingControl userName={userName} />
+          <SellerAttendingControl accountRole={accountRole} userName={userName} />
           <SellerSessionControls />
         </div>
       </div>

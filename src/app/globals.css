@@ -1,26 +1,66 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f4f7f8;
+  --surface: #ffffff;
+  --surface-muted: #e9f0f2;
+  --foreground: #10202b;
+  --muted: #5e707b;
+  --primary: #06aeb8;
+  --primary-hover: #078d96;
+  --border: #d6e1e5;
+  --success: #16815d;
+  --warning: #bd7b18;
+  --danger: #c33b45;
+  --graphite: #0a1d29;
+  --primary-foreground: #ffffff;
+  --on-graphite: #f8fbfc;
+  --on-graphite-muted: #a7b8c1;
+  --shadow-card: 0 14px 35px rgba(16, 32, 43, 0.06);
+  --shadow-primary: 0 12px 24px rgba(6, 174, 184, 0.18);
+  --shadow-graphite: 0 18px 40px rgba(10, 29, 41, 0.18);
+  --shadow-modal: 0 -18px 50px rgba(10, 29, 41, 0.22);
+  --font-app: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-muted: var(--muted);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-border: var(--border);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-graphite: var(--graphite);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-on-graphite: var(--on-graphite);
+  --color-on-graphite-muted: var(--on-graphite-muted);
+  --font-sans: var(--font-app);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-app);
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a,
+input,
+textarea,
+select {
+  touch-action: manipulation;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--primary) 22%, transparent);
 }

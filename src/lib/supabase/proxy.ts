@@ -89,12 +89,14 @@ export async function updateSession(request: NextRequest) {
   }
 
   const defaultPath = profile.role === "admin" ? "/admin" : "/seller";
+  const hasSellerFlowAccess =
+    profile.role === "seller" || profile.role === "expo";
 
   if (isLoginRoute || (isAdminRoute && profile.role !== "admin")) {
     return redirectWithSessionCookies(request, defaultPath, supabaseResponse);
   }
 
-  if (isSellerRoute && profile.role !== "seller") {
+  if (isSellerRoute && !hasSellerFlowAccess) {
     return redirectWithSessionCookies(request, defaultPath, supabaseResponse);
   }
 

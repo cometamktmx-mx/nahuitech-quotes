@@ -7,6 +7,7 @@ import { type FormEvent, useState } from "react";
 import type { SellerAddon, SellerMachine, SellerMachineVariant } from "@/lib/seller-catalog";
 import { createOfflineQuote } from "@/lib/offline/offline-quotes";
 import type { OfflineQuote } from "@/lib/offline/offline-types";
+import { calculateIncludedTaxBreakdown } from "@/lib/quotes/tax";
 import {
   createQuote,
   type CreateQuoteResult,
@@ -67,6 +68,10 @@ function addonQuantityLabel(addon: SellerAddon, machine: SellerMachine, selected
     return `${selectedQuantity} ${selectedQuantity === 1 ? "unidad" : "unidades"} × ${currencyFormatter.format(addon.unitPrice)}`;
   }
   return "Precio fijo";
+}
+
+function isSelectableVariant(variant: SellerMachineVariant) {
+  return variant.active && variant.price !== null && variant.price > 0;
 }
 
 function StepIndicator({ currentStep, supportsAddons }: { currentStep: QuoteStep; supportsAddons: boolean }) {
@@ -207,6 +212,7 @@ function QuoteSummary({ machine, selectedAddons, delivery, customer, compact = f
 
 function QuoteSummary({
   machine,
+  variant,
   selectedAddons,
   selectedAddonQuantities,
   delivery,
@@ -215,6 +221,7 @@ function QuoteSummary({
   compact = false,
 }: {
   machine: SellerMachine;
+  variant: SellerMachineVariant | null;
   selectedAddons: SellerAddon[];
   selectedAddonQuantities: Record<string, number>;
   delivery: DeliveryOption;
@@ -229,6 +236,7 @@ function QuoteSummary({
   const subtotal = machine.basePrice + addonsTotal;
   const discountAmount = coupon?.discountAmount ?? 0;
   const total = subtotal - discountAmount;
+  const tax = calculateIncludedTaxBreakdown(total);
 
   if (compact) {
     return (
@@ -254,7 +262,8 @@ function QuoteSummary({
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Máquina</p>
           <p className="mt-1 font-bold text-foreground">{machine.name}</p>
-          <p className="mt-1 text-sm text-muted">{currencyFormatter.format(machine.basePrice)} MXN</p>
+          {variant ? <><p className="mt-1 text-sm font-semibold text-primary-hover">Versión: {variant.displayName}</p>{variant.description ? <p className="mt-1 text-xs leading-5 text-muted">{variant.description}</p> : null}</> : null}
+          <p className="mt-1 text-sm text-muted">Precio base: {currencyFormatter.format(machine.basePrice)} MXN</p>
         </div>
         <div className="border-t border-border pt-4">
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Add-ons</p>
@@ -273,7 +282,9 @@ function QuoteSummary({
           <p className="mt-3 text-sm font-bold text-foreground">Add-ons: {currencyFormatter.format(addonsTotal)} MXN</p>
         </div>
         <div className="grid gap-2 border-t border-border pt-4 text-sm">
-          <div className="flex justify-between gap-3"><span className="text-muted">Subtotal</span><span className="font-bold text-foreground">{currencyFormatter.format(subtotal)}</span></div>
+          <div className="order-3 flex justify-between gap-3"><span className="text-muted">Subtotal sin IVA</span><span className="font-bold text-foreground">{currencyFormatter.format(tax.subtotalBeforeTax)}</span></div>
+          <div className="order-4 flex justify-between gap-3"><span className="text-muted">IVA 16%</span><span className="font-bold text-foreground">{currencyFormatter.format(tax.taxAmount)}</span></div>
+          <div className="flex justify-between gap-3"><span className="text-muted">Precio configuraciÃ³n</span><span className="font-bold text-foreground">{currencyFormatter.format(subtotal)}</span></div>
           {coupon ? <div className="flex justify-between gap-3"><span className="text-success">Beneficio {coupon.couponName}</span><span className="font-bold text-success">− {currencyFormatter.format(discountAmount)}</span></div> : null}
         </div>
         <div className="border-t border-border pt-4"><p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Entrega</p><p className="mt-2 text-sm font-bold text-foreground">{deliveryLabels[delivery]}</p><p className="mt-1 text-xs text-muted">El importe se definirá posteriormente.</p></div>
@@ -300,8 +311,19 @@ export function SellerQuoteConfigurator({
 }) {
   const router = useRouter();
   const offline = useSellerOffline();
-  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
-  const selectedVariant = variants.find((variant) => variant.id === selectedVariantId) ?? null;
+  const allowedVariantTypes = machine.allowedVariantTypes ?? ["AUTOMATIC", "SEMI_AUTOMATIC"];
+  const requiresVariantSelection = machine.variantSelectionRequired !== false;
+  const commercialVariants = variants.filter((variant) =>
+    allowedVariantTypes.includes(variant.variantType)
+  );
+  const selectableVariants = commercialVariants.filter(isSelectableVariant);
+  const hasCommercialVariants = commercialVariants.length > 0;
+  const [selectedVariant, setSelectedVariant] = useState<SellerMachineVariant | null>(() =>
+    !requiresVariantSelection && selectableVariants.length === 1
+      ? selectableVariants[0]
+      : null
+  );
+  const selectedVariantId = selectedVariant?.id ?? null;
   const [step, setStep] = useState<QuoteStep>(machine.supportsAddons ? "configure" : "details");
   const [selectedAddonQuantities, setSelectedAddonQuantities] = useState<Record<string, number>>(() =>
     Object.fromEntries(addons.filter((addon) => addon.required).map((addon) => [addon.id, 1]))
@@ -320,10 +342,13 @@ export function SellerQuoteConfigurator({
   const [createdLocalQuote, setCreatedLocalQuote] = useState<OfflineQuote | null>(null);
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
-  const quotedMachine = selectedVariant?.price !== null && selectedVariant?.price !== undefined ? { ...machine, basePrice: selectedVariant.price } : machine;
+  const quotedMachine = selectedVariant?.price !== null && selectedVariant?.price !== undefined
+    ? { ...machine, basePrice: selectedVariant.price }
+    : machine;
   const selectedAddons = addons.filter((addon) => (selectedAddonQuantities[addon.id] ?? 0) > 0);
   const subtotal = quotedMachine.basePrice + selectedAddons.reduce((sum, addon) => sum + quoteAddonTotal(addon, quotedMachine, selectedAddonQuantities[addon.id]), 0);
   const total = subtotal - (appliedCoupon?.discountAmount ?? 0);
+  const tax = calculateIncludedTaxBreakdown(total);
 
   function moveTo(nextStep: QuoteStep) {
     setStep(nextStep);
@@ -350,14 +375,14 @@ export function SellerQuoteConfigurator({
     return <main className="mx-auto grid max-w-2xl gap-5 px-5 py-12 text-center"><p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Cuenta Expo</p><h1 className="text-3xl font-black text-foreground">Selecciona quién está atendiendo antes de cotizar.</h1><Link className={primaryButtonClass} href="/seller">Elegir vendedor</Link></main>;
   }
 
-  if (variants.length > 0 && !selectedVariant) {
+  if (requiresVariantSelection && hasCommercialVariants && !selectedVariant) {
     return (
       <main className="mx-auto grid max-w-5xl gap-7 px-5 py-8 md:px-8 md:py-12">
         <header><p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Versión</p><h1 className="mt-3 text-3xl font-black tracking-[-0.04em] text-foreground sm:text-4xl">¿Qué versión necesita tu cliente?</h1><p className="mt-3 text-muted">{machine.name}</p></header>
         <section className="grid gap-5 md:grid-cols-2">
-          {variants.map((variant) => {
-            const available = variant.active && variant.price !== null && variant.price > 0;
-            return <button className={available ? "min-h-48 rounded-3xl border border-border bg-surface p-6 text-left shadow-[var(--shadow-card)] active:scale-[0.99]" : "min-h-48 rounded-3xl border border-border bg-surface-muted p-6 text-left opacity-60"} disabled={!available} key={variant.id} onClick={() => setSelectedVariantId(variant.id)} type="button"><p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">{variant.variantType === "AUTOMATIC" ? "AUTOMÁTICA" : "SEMIAUTOMÁTICA"}</p><p className="mt-4 text-2xl font-black text-foreground">{variant.displayName}</p><p className="mt-6 text-xl font-black text-foreground">{available ? `${currencyFormatter.format(variant.price ?? 0)} MXN` : "Precio pendiente"}</p></button>;
+          {commercialVariants.map((variant) => {
+            const available = isSelectableVariant(variant);
+            return <button aria-label={`Seleccionar ${variant.displayName}`} className={available ? "min-h-48 rounded-3xl border border-border bg-surface p-6 text-left shadow-[var(--shadow-card)] active:scale-[0.99]" : "min-h-48 rounded-3xl border border-border bg-surface-muted p-6 text-left opacity-60"} disabled={!available} key={variant.id} onClick={() => setSelectedVariant(variant)} type="button"><p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">{variant.variantType === "AUTOMATIC" ? "AUTOMÁTICA" : "SEMIAUTOMÁTICA"}</p><p className="mt-4 text-2xl font-black text-foreground">{variant.displayName}</p>{variant.description ? <p className="mt-3 line-clamp-4 text-sm leading-6 text-muted">{variant.description}</p> : null}<p className="mt-6 text-xl font-black text-foreground">{available ? `${currencyFormatter.format(variant.price ?? 0)} MXN` : "Precio pendiente"}</p><p className="mt-2 text-sm font-bold text-muted">{available ? "Disponible · Seleccionar" : "No disponible"}</p></button>;
           })}
         </section>
         <Link className={secondaryButtonClass} href="/seller">Cambiar máquina</Link>
@@ -400,6 +425,11 @@ export function SellerQuoteConfigurator({
   }
 
   async function createLocalQuote() {
+    if (hasCommercialVariants && !selectedVariantId) {
+      setCreateError("Selecciona una versión de la máquina antes de crear la cotización.");
+      return false;
+    }
+
     if (!offline?.sellerId) {
       setCreateError("No hay una sesión local preparada para crear esta cotización offline.");
       return false;
@@ -410,7 +440,7 @@ export function SellerQuoteConfigurator({
         sellerId: offline.sellerId!,
         salespersonId: offline.salespersonId,
         machineId: machine.id,
-        machineVariantId: selectedVariant?.id ?? null,
+        machineVariantId: selectedVariantId,
         addonQuantities: selectedAddonQuantities,
         customerName: customer.name,
         customerCompany: customer.company,
@@ -433,6 +463,12 @@ export function SellerQuoteConfigurator({
     setCreateError("");
     setIsCreating(true);
 
+    if (hasCommercialVariants && !selectedVariantId) {
+      setCreateError("Selecciona una versión de la máquina antes de crear la cotización.");
+      setIsCreating(false);
+      return;
+    }
+
     if (offline && !offline.isOnline) {
       await createLocalQuote();
       setIsCreating(false);
@@ -450,7 +486,7 @@ export function SellerQuoteConfigurator({
         deliveryType: deliveryTypes[delivery],
         couponCode: appliedCoupon?.couponCode ?? "",
         machineImageUrlSnapshot: machine.imageUrl,
-        machineVariantId: selectedVariant?.id ?? null,
+        machineVariantId: selectedVariantId,
         salespersonId: offline?.salespersonId ?? null,
       });
 
@@ -506,12 +542,12 @@ export function SellerQuoteConfigurator({
         <section className="overflow-hidden rounded-3xl border border-border bg-surface shadow-[var(--shadow-card)]">
           <div className="grid md:grid-cols-[16rem_minmax(0,1fr)]">
             <MachineThumbnail className="aspect-[16/9] min-h-full md:aspect-auto" imageUrl={machine.imageUrl} name={machine.name} />
-            <div className="p-5 sm:p-7"><p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">Máquina seleccionada</p><h1 className="mt-3 text-3xl font-black tracking-[-0.04em] text-foreground sm:text-4xl">{machine.name}</h1><p className="mt-3 max-w-2xl text-base leading-7 text-muted">{machine.shortDescription}</p><p className="mt-5 text-3xl font-black tracking-[-0.04em] text-foreground">{currencyFormatter.format(machine.basePrice)} MXN</p>{machine.numberOfBases ? <p className="mt-3 inline-flex rounded-full bg-primary/10 px-4 py-2 text-sm font-bold text-primary-hover">{machine.numberOfBases} bases incluidas</p> : null}{!machine.supportsAddons ? <p className="mt-4 inline-flex rounded-full bg-surface-muted px-4 py-2 text-sm font-bold text-muted">Equipo completo · Sin configuración adicional</p> : null}</div>
+            <div className="p-5 sm:p-7"><p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">Máquina seleccionada</p><h1 className="mt-3 text-3xl font-black tracking-[-0.04em] text-foreground sm:text-4xl">{machine.name}</h1><p className="mt-3 max-w-2xl text-base leading-7 text-muted">{machine.shortDescription}</p>{selectedVariant ? <><p className="mt-4 text-sm font-bold text-primary-hover">Versión: {selectedVariant.displayName}</p>{selectedVariant.description ? <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">{selectedVariant.description}</p> : null}</> : null}<p className="mt-5 text-3xl font-black tracking-[-0.04em] text-foreground">{currencyFormatter.format(quotedMachine.basePrice)} MXN</p>{machine.numberOfBases ? <p className="mt-3 inline-flex rounded-full bg-primary/10 px-4 py-2 text-sm font-bold text-primary-hover">{machine.numberOfBases} bases incluidas</p> : null}{!machine.supportsAddons ? <p className="mt-4 inline-flex rounded-full bg-surface-muted px-4 py-2 text-sm font-bold text-muted">Equipo completo · Sin configuración adicional</p> : null}</div>
           </div>
         </section>
       </div>
 
-      <QuoteSummary compact coupon={appliedCoupon} customer={customer} delivery={delivery} machine={quotedMachine} selectedAddonQuantities={selectedAddonQuantities} selectedAddons={selectedAddons} />
+      <QuoteSummary compact coupon={appliedCoupon} customer={customer} delivery={delivery} machine={quotedMachine} selectedAddonQuantities={selectedAddonQuantities} selectedAddons={selectedAddons} variant={selectedVariant} />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start">
         <div className="min-w-0">
@@ -559,14 +595,16 @@ export function SellerQuoteConfigurator({
             <section className="grid gap-7 rounded-3xl border border-border bg-surface p-5 shadow-[var(--shadow-card)] sm:p-7">
               <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">NAHUITECH</p><h2 className="mt-3 text-2xl font-black tracking-[-0.03em] text-foreground sm:text-3xl">Resumen de la configuración</h2></div>
               <div className="grid gap-6 border-y border-border py-6">
-                <div className="flex items-start justify-between gap-5"><div><p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Máquina seleccionada</p><p className="mt-2 text-lg font-bold text-foreground">{machine.name}</p></div><p className="shrink-0 text-lg font-black text-foreground">{currencyFormatter.format(machine.basePrice)}</p></div>
+                <div className="flex items-start justify-between gap-5"><div><p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Máquina seleccionada</p><p className="mt-2 text-lg font-bold text-foreground">{machine.name}</p>{selectedVariant ? <><p className="mt-3 text-xs font-bold uppercase tracking-[0.14em] text-muted">Versión</p><p className="mt-1 font-semibold text-primary-hover">{selectedVariant.displayName}</p></> : null}</div><div className="shrink-0 text-right"><p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Precio base</p><p className="mt-2 text-lg font-black text-foreground">{currencyFormatter.format(quotedMachine.basePrice)}</p></div></div>
                 <div><p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Add-ons seleccionados</p>{selectedAddons.length > 0 ? <div className="mt-4 grid gap-4">{selectedAddons.map((addon) => <div className="flex items-start justify-between gap-4" key={addon.id}><div><p className="font-bold text-foreground">{addon.name}</p>{addon.description ? <p className="mt-1 text-sm text-muted">{addon.description}</p> : null}<p className="mt-1 text-sm text-muted">{addonQuantityLabel(addon, machine, selectedAddonQuantities[addon.id])}{addon.calculationType !== "FIXED" ? ` = ${currencyFormatter.format(quoteAddonTotal(addon, machine, selectedAddonQuantities[addon.id]))}` : ""}</p></div><p className="shrink-0 font-black text-foreground">{currencyFormatter.format(quoteAddonTotal(addon, machine, selectedAddonQuantities[addon.id]))}</p></div>)}</div> : <p className="mt-3 text-sm text-muted">Esta máquina se cotiza como equipo completo, sin add-ons.</p>}</div>
                 <div><p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Entrega</p><p className="mt-2 font-bold text-foreground">{deliveryLabels[delivery]}</p><p className="mt-1 text-sm text-muted">Por cotizar — no se incluye en el total de equipo.</p></div>
                 <div><p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Cliente</p><p className="mt-2 font-bold text-foreground">{customer.name}</p>{customer.company ? <p className="mt-1 text-sm text-muted">{customer.company}</p> : null}<p className="mt-1 text-sm text-muted">{customer.whatsapp}</p>{customer.email ? <p className="mt-1 text-sm text-muted">{customer.email}</p> : null}</div>
               </div>
               <div className="grid gap-3 border-t border-border pt-5 text-sm">
-                <div className="flex justify-between gap-4"><span className="text-muted">Subtotal</span><span className="font-bold text-foreground">{currencyFormatter.format(subtotal)}</span></div>
+                <div className="flex justify-between gap-4"><span className="text-muted">Precio configuración</span><span className="font-bold text-foreground">{currencyFormatter.format(subtotal)}</span></div>
                 {appliedCoupon ? <div className="flex justify-between gap-4"><span className="text-success">Beneficio {appliedCoupon.couponName}</span><span className="font-bold text-success">− {currencyFormatter.format(appliedCoupon.discountAmount)}</span></div> : null}
+                <div className="flex justify-between gap-4"><span className="text-muted">Subtotal sin IVA</span><span className="font-bold text-foreground">{currencyFormatter.format(tax.subtotalBeforeTax)}</span></div>
+                <div className="flex justify-between gap-4"><span className="text-muted">IVA 16%</span><span className="font-bold text-foreground">{currencyFormatter.format(tax.taxAmount)}</span></div>
               </div>
               <div className="flex items-end justify-between gap-5"><p className="text-sm font-bold uppercase tracking-[0.14em] text-muted">Total equipo</p><p className="text-3xl font-black tracking-[-0.04em] text-foreground">{currencyFormatter.format(total)} MXN</p></div>
               {createError ? <p aria-live="polite" className="rounded-2xl bg-danger/10 px-4 py-4 text-sm font-bold text-danger" role="alert">{createError}</p> : null}
@@ -576,7 +614,7 @@ export function SellerQuoteConfigurator({
           ) : null}
         </div>
 
-        <aside className="grid gap-4 lg:sticky lg:top-6"><QuoteSummary coupon={appliedCoupon} customer={customer} delivery={delivery} machine={quotedMachine} selectedAddonQuantities={selectedAddonQuantities} selectedAddons={selectedAddons} /><SellerCouponPanel addonQuantities={selectedAddonQuantities} appliedCoupon={appliedCoupon} couponCode={couponCode} machineId={machine.id} machineVariantId={selectedVariant?.id ?? null} onAppliedCoupon={setAppliedCoupon} onCouponCodeChange={handleCouponCodeChange} /></aside>
+        <aside className="grid gap-4 lg:sticky lg:top-6"><QuoteSummary coupon={appliedCoupon} customer={customer} delivery={delivery} machine={quotedMachine} selectedAddonQuantities={selectedAddonQuantities} selectedAddons={selectedAddons} variant={selectedVariant} /><SellerCouponPanel addonQuantities={selectedAddonQuantities} appliedCoupon={appliedCoupon} couponCode={couponCode} machineId={machine.id} machineVariantId={selectedVariantId} onAppliedCoupon={setAppliedCoupon} onCouponCodeChange={handleCouponCodeChange} /></aside>
       </div>
     </main>
   );

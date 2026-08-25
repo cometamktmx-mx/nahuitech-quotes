@@ -92,6 +92,13 @@ export type OfflineQuote = {
   /** Legacy Expo selector value kept so quotes saved before the migration can sync. */
   sellerResponsibleId?: string;
   machineVariantId: string | null;
+  machineVariantTypeSnapshot: "AUTOMATIC" | "SEMI_AUTOMATIC" | null;
+  machineVariantNameSnapshot: string | null;
+  machineVariantPriceSnapshot: number | null;
+  machineVariantDescriptionSnapshot: string | null;
+  subtotalBeforeTaxSnapshot: number;
+  taxRateSnapshot: number;
+  taxAmountSnapshot: number;
   /** Legacy field retained so previously saved device quotes can still sync. */
   selectedAddonIds?: string[];
   selectedAddonQuantities: Record<string, number>;

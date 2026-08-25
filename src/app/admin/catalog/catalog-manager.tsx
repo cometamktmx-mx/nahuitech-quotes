@@ -29,10 +29,12 @@ export type CatalogMachine = {
   numberOfBases: number | null;
   supportsAddons: boolean;
   deliveryPolicy: "FLEXIBLE" | "INSTALLATION_REQUIRED" | "SHIPPING_ONLY";
+  variantSelectionRequired: boolean;
+  allowedVariantTypes: Array<"AUTOMATIC" | "SEMI_AUTOMATIC">;
   imageUrl: string | null;
   active: boolean;
   sortOrder: number;
-  variants: Array<{ id: string; variantType: "AUTOMATIC" | "SEMI_AUTOMATIC"; displayName: string; price: number | null; active: boolean; sortOrder: number }>;
+  variants: Array<{ id: string; variantType: "AUTOMATIC" | "SEMI_AUTOMATIC"; displayName: string; price: number | null; description: string | null; active: boolean; sortOrder: number }>;
 };
 
 export type CatalogAddon = {
@@ -95,19 +97,21 @@ function ToggleField({
   defaultChecked,
   title,
   description,
+  disabled = false,
 }: {
   name: string;
   defaultChecked: boolean;
   title: string;
   description: string;
+  disabled?: boolean;
 }) {
   return (
-    <label className="flex min-h-16 cursor-pointer items-center justify-between gap-4 rounded-2xl border border-border bg-surface p-4">
+    <label className={`flex min-h-16 items-center justify-between gap-4 rounded-2xl border border-border bg-surface p-4 ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>
       <span>
         <span className="block text-sm font-bold text-foreground">{title}</span>
         <span className="mt-1 block text-sm text-muted">{description}</span>
       </span>
-      <input className="peer sr-only" defaultChecked={defaultChecked} name={name} type="checkbox" />
+      <input className="peer sr-only" defaultChecked={defaultChecked} disabled={disabled} name={name} type="checkbox" />
       <span className="relative h-7 w-12 shrink-0 rounded-full bg-border transition after:absolute after:left-1 after:top-1 after:size-5 after:rounded-full after:bg-surface after:shadow-sm after:transition peer-checked:bg-primary peer-checked:after:translate-x-5" />
     </label>
   );
@@ -172,6 +176,8 @@ function MachineEditor({
     <EditorShell description="Define los datos técnicos y comerciales de la máquina." onClose={onClose} title={machine ? "Editar máquina" : "Nueva máquina"}>
       <form className="grid gap-6" onSubmit={handleSubmit}>
         <input name="id" type="hidden" value={machine?.id ?? ""} />
+        <input name="variantSelectionRequired" type="hidden" value={machine?.variantSelectionRequired === false ? "" : "on"} />
+        <input name="allowedVariantTypes" type="hidden" value={(machine?.allowedVariantTypes ?? ["AUTOMATIC", "SEMI_AUTOMATIC"]).join(",")} />
 
         <div className="grid gap-5 md:grid-cols-2">
           <label className="grid gap-2">
@@ -219,7 +225,7 @@ function MachineEditor({
               <option value="SHIPPING_ONLY">Solo envío</option>
             </select>
           </label>
-          {machine?.variants.length ? <section className="mt-6 border-t border-border pt-6"><p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">Versiones</p><div className="mt-4 grid gap-4 md:grid-cols-2">{machine.variants.map((variant) => <div className="rounded-2xl border border-border bg-surface-muted/50 p-4" key={variant.id}><input name="variantIds" type="hidden" value={variant.id} /><p className="font-bold text-foreground">{variant.displayName}</p><label className="mt-3 grid gap-2"><FieldLabel>Precio</FieldLabel><input className="min-h-11 rounded-xl border border-border bg-surface px-3" defaultValue={variant.price ?? ""} min="0.01" name={`variantPrice:${variant.id}`} placeholder="Sin precio" step="0.01" type="number" /></label><ToggleField defaultChecked={variant.active} description="Solo puede estar disponible con precio válido." name={`variantActive:${variant.id}`} title="Disponible" /></div>)}</div></section> : null}
+          {machine?.variants.length ? <section className="mt-6 border-t border-border pt-6"><p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">Versiones</p><p className="mt-2 text-sm leading-6 text-muted">El precio comercial se toma de la versión activa. La selección del vendedor respeta las versiones aplicables configuradas para esta máquina.</p><div className="mt-4 grid gap-4 md:grid-cols-2">{machine.variants.map((variant) => { const isCommerciallyAllowed = machine.allowedVariantTypes.includes(variant.variantType); return <div className="rounded-2xl border border-border bg-surface-muted/50 p-4" key={variant.id}><input name="variantIds" type="hidden" value={variant.id} /><input name={`variantType:${variant.id}`} type="hidden" value={variant.variantType} /><p className="font-bold text-foreground">{variant.displayName}</p>{!isCommerciallyAllowed ? <p className="mt-1 text-sm font-semibold text-muted">No aplicable comercialmente</p> : null}<label className="mt-3 grid gap-2"><FieldLabel>Precio</FieldLabel><input className="min-h-11 rounded-xl border border-border bg-surface px-3 disabled:cursor-not-allowed disabled:opacity-60" defaultValue={variant.price ?? ""} disabled={!isCommerciallyAllowed} min="0.01" name={`variantPrice:${variant.id}`} placeholder="Sin precio" step="0.01" type="number" /></label><label className="mt-3 grid gap-2"><FieldLabel>Descripción comercial</FieldLabel><textarea className="min-h-24 rounded-xl border border-border bg-surface px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60" defaultValue={variant.description ?? ""} disabled={!isCommerciallyAllowed} name={`variantDescription:${variant.id}`} placeholder="Descripción de esta versión" /></label><ToggleField defaultChecked={variant.active} description="Solo puede estar disponible con precio válido." disabled={!isCommerciallyAllowed} name={`variantActive:${variant.id}`} title="Disponible" /></div>; })}</div></section> : null}
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">

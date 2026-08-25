@@ -18,6 +18,7 @@ const catalogMetadataKey = (accountId: string) => `catalog:${accountId}`;
 const sellerSessionMetadataKey = "session:last-seller";
 const selectedSalespersonMetadataKey = (accountId: string) =>
   `selected-salesperson:${accountId}`;
+let offlineCatalogSyncInFlight: Promise<{ sellerId: string; syncedAt: string }> | null = null;
 
 type OfflineSellerSession = { sellerId: string };
 
@@ -34,7 +35,7 @@ function requireData<T>(
   return result.data ?? ([] as unknown as T);
 }
 
-export async function syncOfflineCatalog() {
+async function syncOfflineCatalogInternal() {
   const supabase = createClient();
   const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
   const sellerId =
@@ -57,14 +58,14 @@ export async function syncOfflineCatalog() {
     supabase
       .from("machines")
       .select(
-        "id, name, slug, short_description, base_price, number_of_bases, supports_addons, delivery_policy, image_url, sort_order, active"
+        "id, name, slug, short_description, base_price, number_of_bases, supports_addons, delivery_policy, variant_selection_required, allowed_variant_types, image_url, sort_order, active"
       )
       .eq("active", true)
       .order("sort_order")
       .order("name"),
     supabase
       .from("machine_variants")
-      .select("id, machine_id, variant_type, display_name, price, active, sort_order")
+      .select("id, machine_id, variant_type, display_name, price, description, active, sort_order")
       .order("sort_order"),
     supabase
       .from("addons")
@@ -125,6 +126,8 @@ export async function syncOfflineCatalog() {
     numberOfBases: machine.number_of_bases,
     supportsAddons: machine.supports_addons,
     deliveryPolicy: machine.delivery_policy,
+    variantSelectionRequired: machine.variant_selection_required,
+    allowedVariantTypes: machine.allowed_variant_types,
     imageUrl: machine.image_url,
     sortOrder: machine.sort_order,
     active: machine.active,
@@ -135,6 +138,7 @@ export async function syncOfflineCatalog() {
     variantType: variant.variant_type,
     displayName: variant.display_name,
     price: variant.price === null ? null : toNumber(variant.price),
+    description: variant.description,
     active: variant.active,
     sortOrder: variant.sort_order,
   }));
@@ -242,6 +246,23 @@ export async function syncOfflineCatalog() {
   return { sellerId, syncedAt };
 }
 
+export function syncOfflineCatalog() {
+  if (offlineCatalogSyncInFlight) return offlineCatalogSyncInFlight;
+
+  const sync = syncOfflineCatalogInternal();
+  offlineCatalogSyncInFlight = sync;
+  sync.then(
+    () => {
+      if (offlineCatalogSyncInFlight === sync) offlineCatalogSyncInFlight = null;
+    },
+    () => {
+      if (offlineCatalogSyncInFlight === sync) offlineCatalogSyncInFlight = null;
+    }
+  );
+
+  return sync;
+}
+
 export async function getOfflineCatalog(sellerId: string) {
   const [profile, metadata, machines, variants, addons, relations] =
     await Promise.all([
@@ -339,6 +360,7 @@ export async function clearOfflineSellerSession() {
       caches.delete("nahuitech-seller-documents-v1"),
       caches.delete("nahuitech-seller-documents-v2"),
       caches.delete("nahuitech-seller-documents-v3"),
+      caches.delete("nahuitech-seller-documents-v4"),
     ]);
   }
 }

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { generateQuotePdfOnServer } from "@/lib/pdf/quote-pdf-server";
 import type { QuotePdfSnapshot } from "@/lib/pdf/quote-pdf-types";
+import { calculateIncludedTaxBreakdown } from "@/lib/quotes/tax";
 import {
   createSupabaseAdminClient,
   hasSupabaseAdminConfiguration,
@@ -155,7 +156,7 @@ async function loadQuoteSnapshot(quoteId: string): Promise<QuotePdfSnapshot> {
   const { data: quote, error: quoteError } = await supabase
     .from("quotes")
     .select(
-      "folio, customer_id, salesperson_name_snapshot, machine_name_snapshot, machine_base_price_snapshot, machine_number_of_bases_snapshot, machine_image_url_snapshot, machine_variant_type_snapshot, machine_variant_name_snapshot, machine_variant_price_snapshot, delivery_type, delivery_note, subtotal, discount_amount, coupon_code_snapshot, coupon_name_snapshot, coupon_discount_type_snapshot, coupon_discount_value_snapshot, notes, total, created_at"
+      "folio, customer_id, salesperson_name_snapshot, machine_name_snapshot, machine_base_price_snapshot, machine_number_of_bases_snapshot, machine_image_url_snapshot, machine_variant_type_snapshot, machine_variant_name_snapshot, machine_variant_price_snapshot, machine_variant_description_snapshot, delivery_type, delivery_note, subtotal, subtotal_before_tax_snapshot, tax_rate_snapshot, tax_amount_snapshot, discount_amount, coupon_code_snapshot, coupon_name_snapshot, coupon_discount_type_snapshot, coupon_discount_value_snapshot, notes, total, created_at"
     )
     .eq("id", quoteId)
     .maybeSingle();
@@ -184,6 +185,7 @@ async function loadQuoteSnapshot(quoteId: string): Promise<QuotePdfSnapshot> {
   const couponDiscountValue = quote.coupon_discount_value_snapshot === null
     ? null
     : asNumber(quote.coupon_discount_value_snapshot);
+  const historicTax = calculateIncludedTaxBreakdown(asNumber(quote.total));
 
   return {
     folio: quote.folio,
@@ -195,7 +197,7 @@ async function loadQuoteSnapshot(quoteId: string): Promise<QuotePdfSnapshot> {
       basePrice: asNumber(quote.machine_base_price_snapshot),
       numberOfBases: quote.machine_number_of_bases_snapshot,
       imageUrl: quote.machine_image_url_snapshot,
-      variant: quote.machine_variant_type_snapshot && quote.machine_variant_name_snapshot && quote.machine_variant_price_snapshot !== null ? { type: quote.machine_variant_type_snapshot, name: quote.machine_variant_name_snapshot, price: asNumber(quote.machine_variant_price_snapshot) } : null,
+      variant: quote.machine_variant_type_snapshot && quote.machine_variant_name_snapshot && quote.machine_variant_price_snapshot !== null ? { type: quote.machine_variant_type_snapshot, name: quote.machine_variant_name_snapshot, price: asNumber(quote.machine_variant_price_snapshot), description: quote.machine_variant_description_snapshot } : null,
     },
     addons: (addonsResult.data ?? []).map((addon) => ({
       id: addon.id,
@@ -209,6 +211,14 @@ async function loadQuoteSnapshot(quoteId: string): Promise<QuotePdfSnapshot> {
     subtotal: asNumber(quote.subtotal),
     discountAmount: asNumber(quote.discount_amount),
     total: asNumber(quote.total),
+    tax: quote.subtotal_before_tax_snapshot !== null && quote.tax_rate_snapshot !== null && quote.tax_amount_snapshot !== null
+      ? {
+          subtotalBeforeTax: asNumber(quote.subtotal_before_tax_snapshot),
+          taxRate: asNumber(quote.tax_rate_snapshot),
+          taxAmount: asNumber(quote.tax_amount_snapshot),
+          totalWithTax: asNumber(quote.total),
+        }
+      : historicTax,
     coupon:
       quote.coupon_code_snapshot &&
       quote.coupon_name_snapshot &&

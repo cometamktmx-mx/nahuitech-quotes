@@ -26,7 +26,7 @@ export default async function AdminQuoteDetailPage({
   const { data: quote, error: quoteError } = await supabase
     .from("quotes")
     .select(
-      "folio, customer_id, salesperson_name_snapshot, status, machine_name_snapshot, machine_base_price_snapshot, machine_number_of_bases_snapshot, machine_image_url_snapshot, machine_variant_type_snapshot, machine_variant_name_snapshot, machine_variant_price_snapshot, delivery_type, delivery_note, subtotal, discount_amount, coupon_code_snapshot, coupon_name_snapshot, coupon_discount_type_snapshot, coupon_discount_value_snapshot, notes, total, created_at"
+      "folio, customer_id, salesperson_name_snapshot, status, machine_name_snapshot, machine_base_price_snapshot, machine_number_of_bases_snapshot, machine_image_url_snapshot, machine_variant_type_snapshot, machine_variant_name_snapshot, machine_variant_price_snapshot, machine_variant_description_snapshot, delivery_type, delivery_note, subtotal, subtotal_before_tax_snapshot, tax_rate_snapshot, tax_amount_snapshot, discount_amount, coupon_code_snapshot, coupon_name_snapshot, coupon_discount_type_snapshot, coupon_discount_value_snapshot, notes, total, created_at"
     )
     .eq("id", quoteId)
     .maybeSingle();
@@ -94,6 +94,7 @@ export default async function AdminQuoteDetailPage({
           machineVariantType: quote.machine_variant_type_snapshot,
           machineVariantName: quote.machine_variant_name_snapshot,
           machineVariantPrice: quote.machine_variant_price_snapshot === null ? null : asNumber(quote.machine_variant_price_snapshot),
+          machineVariantDescription: quote.machine_variant_description_snapshot,
           deliveryType: quote.delivery_type,
           deliveryNote: quote.delivery_note,
           subtotal: asCatalogNumber(quote.subtotal),
@@ -104,6 +105,9 @@ export default async function AdminQuoteDetailPage({
           couponDiscountValue: quote.coupon_discount_value_snapshot === null ? null : asCatalogNumber(quote.coupon_discount_value_snapshot),
           notes: quote.notes,
           total: asCatalogNumber(quote.total),
+          subtotalBeforeTax: quote.subtotal_before_tax_snapshot === null ? null : asCatalogNumber(quote.subtotal_before_tax_snapshot),
+          taxRate: quote.tax_rate_snapshot === null ? null : asNumber(quote.tax_rate_snapshot),
+          taxAmount: quote.tax_amount_snapshot === null ? null : asCatalogNumber(quote.tax_amount_snapshot),
         }}
         sellerName={quote.salesperson_name_snapshot ?? "Vendedor"}
         whatsapp={{

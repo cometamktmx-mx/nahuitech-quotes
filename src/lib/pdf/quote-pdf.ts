@@ -6,6 +6,7 @@ import type { PDFDocument, PDFFont, PDFImage, PDFPage } from "pdf-lib";
 
 import { hexToRgb, quotePdfBrand } from "./quote-pdf-brand";
 import type { QuotePdfAddon, QuotePdfSnapshot } from "./quote-pdf-types";
+import { calculateIncludedTaxBreakdown } from "../quotes/tax";
 
 const logoPath = "/brand/NAHUITECH%20LOGO.png";
 const pageWidth = 595.28;
@@ -439,10 +440,16 @@ function drawMachine(context: DrawingContext, snapshot: QuotePdfSnapshot) {
   const textStart = hasImage ? margin + 18 + imageBoxWidth : margin + 12;
   const textWidth = hasImage ? 228 : 330;
   const machineNameLines = wrapText(snapshot.machine.name, context.bold, hasImage ? 13.5 : 15.5, textWidth);
-  const nameHeight = machineNameLines.length * (hasImage ? 15.5 : 18);
-  const blockHeight = hasImage
-    ? Math.max(82, nameHeight + 37)
-    : Math.max(nameHeight + 25, 54);
+  const metadata = [
+    snapshot.machine.variant ? `Versión: ${snapshot.machine.variant.name}` : null,
+    snapshot.machine.numberOfBases !== null ? `${snapshot.machine.numberOfBases} bases` : null,
+  ].filter((value): value is string => Boolean(value)).join(" · ");
+  const descriptionLines = snapshot.machine.variant?.description
+    ? wrapText(snapshot.machine.variant.description, context.regular, 7.4, textWidth)
+    : [];
+  const nameHeight = machineNameLines.length * (hasImage ? 15 : 17);
+  const descriptionHeight = descriptionLines.length * 8.5;
+  const blockHeight = Math.max(hasImage ? 82 : 58, nameHeight + descriptionHeight + (metadata ? 32 : 23));
   drawSectionTitle(context, snapshot, "MÁQUINA", blockHeight + 7);
   const boxBottom = context.cursorY - blockHeight;
 
@@ -477,25 +484,27 @@ function drawMachine(context: DrawingContext, snapshot: QuotePdfSnapshot) {
       font: context.bold,
       color: rgbFromHex(context.pdf, quotePdfBrand.black),
     });
-    nameY -= hasImage ? 15.5 : 18;
+    nameY -= hasImage ? 15 : 17;
   }
-  if (snapshot.machine.numberOfBases !== null) {
-    context.page.drawText(`${snapshot.machine.numberOfBases} bases`, {
+  if (metadata) {
+    context.page.drawText(metadata, {
       x: textStart,
-      y: boxBottom + 13,
-      size: 8,
-      font: context.regular,
-      color: rgbFromHex(context.pdf, quotePdfBrand.muted),
-    });
-  }
-  if (snapshot.machine.variant) {
-    context.page.drawText(`Versión: ${snapshot.machine.variant.name}`, {
-      x: textStart,
-      y: boxBottom + (snapshot.machine.numberOfBases !== null ? 2 : 13),
+      y: nameY - 1,
       size: 7.5,
       font: context.regular,
       color: rgbFromHex(context.pdf, quotePdfBrand.muted),
     });
+    nameY -= 12;
+  }
+  for (const line of descriptionLines) {
+    context.page.drawText(line, {
+      x: textStart,
+      y: nameY,
+      size: 7.4,
+      font: context.regular,
+      color: rgbFromHex(context.pdf, quotePdfBrand.muted),
+    });
+    nameY -= 8.5;
   }
   const price = asMoney(snapshot.machine.basePrice);
   context.page.drawText(price, {
@@ -641,7 +650,9 @@ function drawDelivery(context: DrawingContext, snapshot: QuotePdfSnapshot) {
 }
 
 function drawFinancialSummary(context: DrawingContext, snapshot: QuotePdfSnapshot) {
-  const height = snapshot.coupon && snapshot.discountAmount > 0 ? 76 : 58;
+  const hasCoupon = Boolean(snapshot.coupon && snapshot.discountAmount > 0);
+  const tax = snapshot.tax ?? calculateIncludedTaxBreakdown(snapshot.total);
+  const height = hasCoupon ? 104 : 76;
   ensureSpace(context, snapshot, height + 10);
   const boxBottom = context.cursorY - height;
   context.page.drawRectangle({
@@ -673,17 +684,19 @@ function drawFinancialSummary(context: DrawingContext, snapshot: QuotePdfSnapsho
     rowY -= emphasized ? 19 : 14;
   };
 
-  drawRow(snapshot.coupon && snapshot.discountAmount > 0 ? "Precio configuración" : "Subtotal", asMoney(snapshot.subtotal));
-  if (snapshot.coupon && snapshot.discountAmount > 0) {
+  if (hasCoupon) {
+    drawRow("Precio configuración", asMoney(snapshot.subtotal));
     drawRow("Beneficio Expo", `- ${asMoney(snapshot.discountAmount)}`);
   }
-  drawRow(snapshot.coupon && snapshot.discountAmount > 0 ? "PRECIO ESPECIAL EXPO" : "TOTAL", asMoney(snapshot.total), true);
+  drawRow("Subtotal sin IVA", asMoney(tax.subtotalBeforeTax));
+  drawRow(`IVA ${Math.round(tax.taxRate * 100)}%`, asMoney(tax.taxAmount));
+  drawRow(hasCoupon ? "PRECIO FINAL" : "TOTAL", asMoney(snapshot.total), true);
   context.cursorY = boxBottom - 9;
 }
 
 function drawPromotionAndFinancialSummary(context: DrawingContext, snapshot: QuotePdfSnapshot) {
   const hasCoupon = Boolean(snapshot.coupon && snapshot.discountAmount > 0);
-  const requiredHeight = hasCoupon ? 166 : 68;
+  const requiredHeight = hasCoupon ? 194 : 86;
   ensureSpace(context, snapshot, requiredHeight);
   drawCoupon(context, snapshot);
   drawFinancialSummary(context, snapshot);

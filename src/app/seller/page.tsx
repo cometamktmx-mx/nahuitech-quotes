@@ -13,7 +13,7 @@ export default async function SellerPage() {
   const { data, error } = await supabase
     .from("machines")
     .select(
-      "id, name, slug, short_description, base_price, number_of_bases, supports_addons, delivery_policy, image_url, sort_order"
+      "id, name, slug, short_description, base_price, number_of_bases, supports_addons, delivery_policy, variant_selection_required, allowed_variant_types, image_url, sort_order"
     )
     .eq("active", true)
     .order("sort_order")
@@ -21,6 +21,25 @@ export default async function SellerPage() {
 
   if (error) {
     throw new Error("No se pudieron cargar las máquinas disponibles.");
+  }
+
+  const { data: variantRows, error: variantsError } = await supabase
+    .from("machine_variants")
+    .select("machine_id, price, active")
+    .eq("active", true);
+
+  if (variantsError) {
+    throw new Error("No se pudieron cargar los precios de versiones.");
+  }
+
+  const startingPriceByMachine = new Map<string, number>();
+  for (const variant of variantRows ?? []) {
+    const price = asCatalogNumber(variant.price);
+    if (price <= 0) continue;
+    const current = startingPriceByMachine.get(variant.machine_id);
+    if (current === undefined || price < current) {
+      startingPriceByMachine.set(variant.machine_id, price);
+    }
   }
 
   const machines: SellerMachine[] = (data ?? []).map((machine) => ({
@@ -32,13 +51,15 @@ export default async function SellerPage() {
     numberOfBases: machine.number_of_bases,
     supportsAddons: machine.supports_addons,
     deliveryPolicy: machine.delivery_policy,
+    variantSelectionRequired: machine.variant_selection_required,
+    allowedVariantTypes: machine.allowed_variant_types,
     imageUrl: machine.image_url,
     sortOrder: machine.sort_order,
   }));
 
   const { data: recentQuoteRows, error: recentQuotesError } = await supabase
     .from("quotes")
-    .select("id, folio, customer_id, salesperson_name_snapshot, machine_name_snapshot, total, status, created_at")
+    .select("id, folio, customer_id, salesperson_name_snapshot, machine_name_snapshot, machine_variant_name_snapshot, total, status, created_at")
     .order("created_at", { ascending: false })
     .limit(5);
 
@@ -64,6 +85,7 @@ export default async function SellerPage() {
     customerName: customerNames.get(quote.customer_id) ?? "Cliente",
     salespersonName: quote.salesperson_name_snapshot ?? "Vendedor",
     machineName: quote.machine_name_snapshot,
+    machineVariantName: quote.machine_variant_name_snapshot,
     total: asCatalogNumber(quote.total),
     status: quote.status,
     createdAt: new Intl.DateTimeFormat("es-MX", {
@@ -94,7 +116,7 @@ export default async function SellerPage() {
         </header>
 
         <section aria-label="Máquinas disponibles" className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {machines.map((machine) => <SellerMachineCard key={machine.id} machine={machine} />)}
+          {machines.map((machine) => <SellerMachineCard key={machine.id} machine={machine} startingPrice={startingPriceByMachine.get(machine.id)} />)}
         </section>
 
         <section aria-label="Cotizaciones recientes" className="rounded-3xl border border-border bg-surface p-5 shadow-[var(--shadow-card)] sm:p-7">
@@ -104,7 +126,7 @@ export default async function SellerPage() {
           </div>
           {recentQuotes.length > 0 ? (
             <div className="mt-5 grid gap-3">
-              {recentQuotes.map((quote) => <Link className="grid min-h-20 gap-2 rounded-2xl border border-border bg-surface-muted/40 px-4 py-3 transition active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:gap-5" href={`/seller/quotes/${quote.id}`} key={quote.id}><div className="min-w-0"><p className="truncate font-bold text-foreground">{quote.folio}</p><p className="mt-1 truncate text-sm text-muted">{quote.customerName} · {quote.machineName} · {quote.createdAt}</p></div><p className="text-sm font-bold text-foreground">{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(quote.total)}</p><p className="text-xs font-bold uppercase tracking-[0.12em] text-success">{quote.status === "CREATED" ? "Creada" : quote.status}</p></Link>)}
+              {recentQuotes.map((quote) => <Link className="grid min-h-20 gap-2 rounded-2xl border border-border bg-surface-muted/40 px-4 py-3 transition active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:gap-5" href={`/seller/quotes/${quote.id}`} key={quote.id}><div className="min-w-0"><p className="truncate font-bold text-foreground">{quote.folio}</p><p className="mt-1 truncate text-sm text-muted">{quote.customerName} · {quote.machineName}{quote.machineVariantName ? ` · ${quote.machineVariantName}` : ""} · {quote.createdAt}</p></div><p className="text-sm font-bold text-foreground">{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(quote.total)}</p><p className="text-xs font-bold uppercase tracking-[0.12em] text-success">{quote.status === "CREATED" ? "Creada" : quote.status}</p></Link>)}
             </div>
           ) : <p className="mt-5 rounded-2xl bg-surface-muted px-4 py-5 text-sm text-muted">Aún no tienes cotizaciones creadas.</p>}
         </section>

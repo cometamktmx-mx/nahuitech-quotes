@@ -7,6 +7,10 @@ export type SellerMachine = {
   numberOfBases: number | null;
   supportsAddons: boolean;
   deliveryPolicy: "FLEXIBLE" | "INSTALLATION_REQUIRED" | "SHIPPING_ONLY";
+  /** Whether the seller must explicitly confirm a commercial version. */
+  variantSelectionRequired: boolean;
+  /** Variant types that are commercially applicable to this machine. */
+  allowedVariantTypes: Array<"AUTOMATIC" | "SEMI_AUTOMATIC">;
   imageUrl: string | null;
   sortOrder: number;
 };
@@ -17,6 +21,7 @@ export type SellerMachineVariant = {
   variantType: "AUTOMATIC" | "SEMI_AUTOMATIC";
   displayName: string;
   price: number | null;
+  description: string | null;
   active: boolean;
   sortOrder: number;
 };

@@ -1,6 +1,7 @@
 "use client";
 
 import type { QuotePdfSnapshot } from "@/lib/pdf/quote-pdf-types";
+import { calculateIncludedTaxBreakdown } from "@/lib/quotes/tax";
 
 import { offlineDb } from "./offline-db";
 import { calculateConfiguration, OfflineQuoteValidationError, validateOfflineCoupon } from "./quote-calculation";
@@ -112,8 +113,28 @@ async function loadOfflineConfiguration(machineId: string, addonQuantities: Reco
     throw new OfflineQuoteValidationError("La máquina no está disponible en el catálogo local.");
   }
 
-  const hasVariants = variants.length > 0;
-  const variant = machineVariantId ? variants.find((candidate) => candidate.id === machineVariantId) ?? null : null;
+  const allowedVariantTypes = machine.allowedVariantTypes ?? ["AUTOMATIC", "SEMI_AUTOMATIC"];
+  const commercialVariants = variants.filter((candidate) =>
+    allowedVariantTypes.includes(candidate.variantType)
+  );
+  const hasVariants = commercialVariants.length > 0;
+  const selectableVariants = commercialVariants.filter(
+    (candidate) => candidate.active && candidate.price !== null && candidate.price > 0
+  );
+  const selectedVariant = machineVariantId
+    ? commercialVariants.find((candidate) => candidate.id === machineVariantId) ?? null
+    : null;
+  if (machineVariantId && !selectedVariant) {
+    throw new OfflineQuoteValidationError("La versión seleccionada no corresponde a esta máquina.");
+  }
+  const variant =
+    selectedVariant ??
+    (machine.variantSelectionRequired === false && selectableVariants.length === 1
+      ? selectableVariants[0]
+      : null);
+  if (hasVariants && !variant) {
+    throw new OfflineQuoteValidationError("Selecciona una versión de la máquina antes de crear la cotización.");
+  }
   if (hasVariants && (!variant || !variant.active || variant.price === null || variant.price <= 0)) {
     throw new OfflineQuoteValidationError("La versión seleccionada no está disponible en el catálogo local.");
   }
@@ -258,6 +279,7 @@ export async function createOfflineQuote(input: OfflineQuoteInput) {
     createdAt,
   };
   const total = roundedMoney(configuration.subtotal - (coupon?.discountAmount ?? 0));
+  const tax = calculateIncludedTaxBreakdown(total);
   const pdfSnapshot: QuotePdfSnapshot = {
     folio: createOfflineFolio(new Date(createdAt)),
     createdAt,
@@ -273,12 +295,20 @@ export async function createOfflineQuote(input: OfflineQuoteInput) {
       basePrice: machine.basePrice,
       numberOfBases: machine.numberOfBases,
       imageUrl: machine.imageUrl,
-      variant: variant ? { type: variant.variantType, name: variant.displayName, price: variant.price! } : null,
+      variant: variant
+        ? {
+            type: variant.variantType,
+            name: variant.displayName,
+            price: variant.price!,
+            description: variant.description,
+          }
+        : null,
     },
     addons: configuration.quoteAddons,
     subtotal: configuration.subtotal,
     discountAmount: coupon?.discountAmount ?? 0,
     total,
+    tax,
     coupon,
     delivery: {
       type: input.deliveryType,
@@ -296,6 +326,13 @@ export async function createOfflineQuote(input: OfflineQuoteInput) {
     salespersonId,
     salespersonNameSnapshot: salespersonName,
     machineVariantId: variant?.id ?? null,
+    machineVariantTypeSnapshot: variant?.variantType ?? null,
+    machineVariantNameSnapshot: variant?.displayName ?? null,
+    machineVariantPriceSnapshot: variant?.price ?? null,
+    machineVariantDescriptionSnapshot: variant?.description ?? null,
+    subtotalBeforeTaxSnapshot: tax.subtotalBeforeTax,
+    taxRateSnapshot: tax.taxRate,
+    taxAmountSnapshot: tax.taxAmount,
     selectedAddonQuantities: { ...input.addonQuantities },
     couponCode: coupon?.code ?? null,
     deliveryType: input.deliveryType,

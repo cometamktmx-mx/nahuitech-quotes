@@ -3,6 +3,7 @@ import Link from "next/link";
 import { QuotePdfDownloadButton } from "@/components/quote-pdf-download-button";
 import { QuoteWhatsAppButton } from "@/components/quote-whatsapp-button";
 import type { QuotePdfSnapshot } from "@/lib/pdf/quote-pdf-types";
+import { calculateIncludedTaxBreakdown } from "@/lib/quotes/tax";
 
 type QuoteAddonSnapshot = {
   id: string;
@@ -25,6 +26,7 @@ type QuoteSnapshot = {
   machineVariantType: "AUTOMATIC" | "SEMI_AUTOMATIC" | null;
   machineVariantName: string | null;
   machineVariantPrice: number | null;
+  machineVariantDescription: string | null;
   deliveryType: "SHIPPING" | "INSTALLATION" | "LATER";
   deliveryNote: string | null;
   subtotal: number;
@@ -35,6 +37,9 @@ type QuoteSnapshot = {
   couponDiscountValue: number | null;
   notes: string | null;
   total: number;
+  subtotalBeforeTax: number | null;
+  taxRate: number | null;
+  taxAmount: number | null;
 };
 
 type QuoteCustomer = {
@@ -104,7 +109,7 @@ export function QuoteDetailCard({
 
           <section className="border-y border-border py-6">
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Máquina</p>
-            <div className="mt-3 flex items-start justify-between gap-5"><div><p className="text-lg font-bold text-foreground">{quote.machineName}</p>{quote.machineNumberOfBases ? <p className="mt-1 text-sm text-muted">{quote.machineNumberOfBases} bases</p> : null}</div><p className="shrink-0 text-lg font-black text-foreground">{currencyFormatter.format(quote.machineBasePrice)}</p></div>
+            <div className="mt-3 flex items-start justify-between gap-5"><div><p className="text-lg font-bold text-foreground">{quote.machineName}</p>{quote.machineVariantName ? <p className="mt-1 text-sm font-semibold text-primary-hover">Versión: {quote.machineVariantName}</p> : null}{quote.machineVariantDescription ? <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">{quote.machineVariantDescription}</p> : null}{quote.machineNumberOfBases ? <p className="mt-1 text-sm text-muted">{quote.machineNumberOfBases} bases</p> : null}</div><p className="shrink-0 text-lg font-black text-foreground">{currencyFormatter.format(quote.machineBasePrice)}</p></div>
           </section>
 
           <section>
@@ -149,6 +154,15 @@ export function QuoteDetailCard({
     : quote.couponDiscountValue === null
       ? null
       : currencyFormatter.format(quote.couponDiscountValue);
+  const historicTax = calculateIncludedTaxBreakdown(quote.total);
+  const tax = quote.subtotalBeforeTax !== null && quote.taxRate !== null && quote.taxAmount !== null
+    ? {
+        subtotalBeforeTax: quote.subtotalBeforeTax,
+        taxRate: quote.taxRate,
+        taxAmount: quote.taxAmount,
+        totalWithTax: quote.total,
+      }
+    : historicTax;
 
   const pdfSnapshot: QuotePdfSnapshot = {
     folio: quote.folio,
@@ -160,7 +174,7 @@ export function QuoteDetailCard({
       basePrice: quote.machineBasePrice,
       numberOfBases: quote.machineNumberOfBases,
       imageUrl: quote.machineImageUrl,
-      variant: quote.machineVariantType && quote.machineVariantName && quote.machineVariantPrice !== null ? { type: quote.machineVariantType, name: quote.machineVariantName, price: quote.machineVariantPrice } : null,
+      variant: quote.machineVariantType && quote.machineVariantName && quote.machineVariantPrice !== null ? { type: quote.machineVariantType, name: quote.machineVariantName, price: quote.machineVariantPrice, description: quote.machineVariantDescription } : null,
     },
     addons: addons.map((addon) => ({
       id: addon.id,
@@ -174,6 +188,7 @@ export function QuoteDetailCard({
     subtotal: quote.subtotal,
     discountAmount: quote.discountAmount,
     total: quote.total,
+    tax,
     coupon:
       quote.couponCode &&
       quote.couponName &&
@@ -219,7 +234,7 @@ export function QuoteDetailCard({
 
           <section className="border-y border-border py-6">
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Máquina</p>
-            <div className="mt-3 flex items-start justify-between gap-5"><div><p className="text-lg font-bold text-foreground">{quote.machineName}</p>{quote.machineNumberOfBases ? <p className="mt-1 text-sm text-muted">{quote.machineNumberOfBases} bases</p> : null}</div><p className="shrink-0 text-lg font-black text-foreground">{currencyFormatter.format(quote.machineBasePrice)}</p></div>
+            <div className="mt-3 flex items-start justify-between gap-5"><div><p className="text-lg font-bold text-foreground">{quote.machineName}</p>{quote.machineVariantName ? <p className="mt-1 text-sm font-semibold text-primary-hover">Versión: {quote.machineVariantName}</p> : null}{quote.machineNumberOfBases ? <p className="mt-1 text-sm text-muted">{quote.machineNumberOfBases} bases</p> : null}</div><p className="shrink-0 text-lg font-black text-foreground">{currencyFormatter.format(quote.machineBasePrice)}</p></div>
           </section>
 
           <section>
@@ -230,8 +245,10 @@ export function QuoteDetailCard({
           <section className="border-t border-border pt-6"><p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Entrega</p><p className="mt-2 font-bold text-foreground">{deliveryLabel[quote.deliveryType]}{quote.deliveryNote ? ` — ${quote.deliveryNote}` : ""}</p><p className="mt-1 text-sm text-muted">La entrega no se incluye como importe en esta cotización.</p></section>
 
           <section className="grid gap-3 border-t border-border pt-6 text-sm">
-            <div className="flex justify-between gap-4"><span className="text-muted">Subtotal</span><span className="font-bold text-foreground">{currencyFormatter.format(quote.subtotal)}</span></div>
+            <div className="flex justify-between gap-4"><span className="text-muted">Precio configuración</span><span className="font-bold text-foreground">{currencyFormatter.format(quote.subtotal)}</span></div>
             {quote.discountAmount > 0 ? <div className="flex justify-between gap-4"><span className="text-muted"><span className="block">Beneficio {quote.couponName ?? "Expo"}{couponBenefit ? ` (${couponBenefit})` : ""}</span>{quote.couponCode ? <span className="mt-1 block text-xs font-bold uppercase tracking-[0.12em] text-muted">Código: {quote.couponCode}</span> : null}</span><span className="font-bold text-success">− {currencyFormatter.format(quote.discountAmount)}</span></div> : null}
+            <div className="flex justify-between gap-4"><span className="text-muted">Subtotal sin IVA</span><span className="font-bold text-foreground">{currencyFormatter.format(tax.subtotalBeforeTax)}</span></div>
+            <div className="flex justify-between gap-4"><span className="text-muted">IVA {Math.round(tax.taxRate * 100)}%</span><span className="font-bold text-foreground">{currencyFormatter.format(tax.taxAmount)}</span></div>
             <div className="flex items-end justify-between gap-4 border-t border-border pt-4"><span className="font-bold uppercase tracking-[0.14em] text-muted">Total equipo</span><span className="text-3xl font-black tracking-[-0.04em] text-foreground">{currencyFormatter.format(quote.total)} MXN</span></div>
           </section>
         </div>

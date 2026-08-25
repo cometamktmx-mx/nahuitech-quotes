@@ -1,6 +1,6 @@
-const APP_SHELL_CACHE = "nahuitech-app-shell-v3";
-const SELLER_DOCUMENT_CACHE = "nahuitech-seller-documents-v3";
-const STATIC_CACHE = "nahuitech-static-v3";
+const APP_SHELL_CACHE = "nahuitech-app-shell-v4";
+const SELLER_DOCUMENT_CACHE = "nahuitech-seller-documents-v4";
+const STATIC_CACHE = "nahuitech-static-v4";
 const CACHE_PREFIX = "nahuitech-";
 const APP_SHELL = [
   "/manifest.webmanifest",

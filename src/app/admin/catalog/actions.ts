@@ -135,6 +135,22 @@ function optionalOverride(value: FormDataEntryValue | null, fieldName: string) {
   return text ? nonNegativePrice(text, fieldName) : null;
 }
 
+function allowedVariantTypes(value: FormDataEntryValue | null) {
+  const raw = typeof value === "string" ? value : "AUTOMATIC,SEMI_AUTOMATIC";
+  const types = raw
+    .split(",")
+    .map((type) => type.trim())
+    .filter((type): type is "AUTOMATIC" | "SEMI_AUTOMATIC" =>
+      type === "AUTOMATIC" || type === "SEMI_AUTOMATIC"
+    );
+
+  if (types.length === 0) {
+    throw new ValidationError("La máquina debe permitir al menos una versión comercial.");
+  }
+
+  return [...new Set(types)];
+}
+
 async function syncAddonMachines(addonId: string, formData: FormData, selectedMachineIds: string[]) {
   const supabase = await getAdminClient();
   const uniqueMachineIds = [...new Set(selectedMachineIds)];
@@ -228,6 +244,8 @@ export async function saveMachine(
       ),
       supports_addons: formData.get("supportsAddons") === "on",
       delivery_policy: requiredText(formData.get("deliveryPolicy"), "La política de entrega"),
+      variant_selection_required: formData.get("variantSelectionRequired") === "on",
+      allowed_variant_types: allowedVariantTypes(formData.get("allowedVariantTypes")),
       image_url: imageUrl(formData.get("imageUrl")),
       active: formData.get("active") === "on",
       sort_order: nonNegativeInteger(formData.get("sortOrder"), "El orden"),
@@ -262,12 +280,24 @@ export async function saveMachine(
 
     for (const value of formData.getAll("variantIds")) {
       const variantId = assertUuid(value);
+      const variantType = requiredText(
+        formData.get(`variantType:${variantId}`),
+        "El tipo de versión"
+      );
+      if (variantType !== "AUTOMATIC" && variantType !== "SEMI_AUTOMATIC") {
+        throw new ValidationError("El tipo de versión no es válido.");
+      }
+      const isAllowed = payload.allowed_variant_types.includes(variantType);
       const priceText = optionalText(formData.get(`variantPrice:${variantId}`));
       const active = formData.get(`variantActive:${variantId}`) === "on";
+      if (active && !isAllowed) {
+        throw new ValidationError("Esta versión no aplica comercialmente para la máquina.");
+      }
       if (active && !priceText) throw new ValidationError("Asigna un precio antes de activar una versión.");
       const price = priceText ? nonNegativePrice(priceText, "El precio de la versión") : null;
       if (price !== null && Number(price) <= 0) throw new ValidationError("El precio de la versión debe ser mayor que cero.");
-      const { error } = await supabase.from("machine_variants").update({ price, active }).eq("id", variantId).eq("machine_id", savedMachineId!);
+      const description = optionalText(formData.get(`variantDescription:${variantId}`));
+      const { error } = await supabase.from("machine_variants").update({ price, active, description }).eq("id", variantId).eq("machine_id", savedMachineId!);
       if (error) throw new Error("No se pudo guardar una versión de máquina.");
     }
 

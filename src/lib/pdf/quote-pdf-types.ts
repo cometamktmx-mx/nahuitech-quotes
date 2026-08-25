@@ -31,12 +31,23 @@ export type QuotePdfSnapshot = {
     basePrice: number;
     numberOfBases: number | null;
     imageUrl: string | null;
-    variant: { type: "AUTOMATIC" | "SEMI_AUTOMATIC"; name: string; price: number } | null;
+    variant: {
+      type: "AUTOMATIC" | "SEMI_AUTOMATIC";
+      name: string;
+      price: number;
+      description: string | null;
+    } | null;
   };
   addons: QuotePdfAddon[];
   subtotal: number;
   discountAmount: number;
   total: number;
+  tax?: {
+    subtotalBeforeTax: number;
+    taxRate: number;
+    taxAmount: number;
+    totalWithTax: number;
+  } | null;
   coupon: QuotePdfCoupon | null;
   delivery: {
     type: "SHIPPING" | "INSTALLATION" | "LATER";

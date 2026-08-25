@@ -234,8 +234,23 @@ export function SellerOfflineMode() {
           aria-label="Máquinas disponibles offline"
           className="grid gap-5 md:grid-cols-2 xl:grid-cols-3"
         >
-          {machines.map((machine) => (
-            <button
+          {machines.map((machine) => {
+            const allowedVariantTypes = machine.allowedVariantTypes ?? ["AUTOMATIC", "SEMI_AUTOMATIC"];
+            const variantPrices = variants
+              .filter(
+                (variant) =>
+                  variant.machineId === machine.id &&
+                  allowedVariantTypes.includes(variant.variantType) &&
+                  variant.active &&
+                  variant.price !== null &&
+                  variant.price > 0
+              )
+              .map((variant) => variant.price!);
+            const startingPrice = variantPrices.length > 0
+              ? Math.min(...variantPrices)
+              : machine.basePrice;
+
+            return <button
               className="flex min-h-80 flex-col overflow-hidden rounded-3xl border border-border bg-surface text-left shadow-[var(--shadow-card)] active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
               key={machine.id}
               onClick={() => setSelectedMachine(machine)}
@@ -254,11 +269,11 @@ export function SellerOfflineMode() {
                   {machine.shortDescription}
                 </span>
                 <span className="mt-auto pt-6 text-2xl font-black tracking-[-0.04em] text-foreground">
-                  {currencyFormatter.format(machine.basePrice)}
+                  {currencyFormatter.format(startingPrice)}
                 </span>
               </span>
-            </button>
-          ))}
+            </button>;
+          })}
         </section>
       </main>
     </div>

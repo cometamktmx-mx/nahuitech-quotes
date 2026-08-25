@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { getSellerClient } from "@/lib/auth/get-seller-client";
 import type { QuotePdfSnapshot } from "@/lib/pdf/quote-pdf-types";
+import { calculateIncludedTaxBreakdown } from "@/lib/quotes/tax";
 
 type DeliveryType = "SHIPPING" | "INSTALLATION" | "LATER";
 
@@ -93,11 +94,7 @@ function validateMachineImageUrlSnapshot(value: unknown) {
 }
 
 function couponErrorMessage(error: unknown) {
-  const rawMessage = error instanceof Error
-    ? error.message
-    : typeof error === "object" && error !== null && "message" in error && typeof error.message === "string"
-      ? error.message
-      : "";
+  const rawMessage = getErrorMessage(error);
   const message = rawMessage.toLowerCase();
 
   if (message.includes("coupon code was not found")) return "Código no encontrado.";
@@ -109,6 +106,101 @@ function couponErrorMessage(error: unknown) {
   }
 
   return null;
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
+  }
+
+  return "";
+}
+
+function createQuoteErrorMessage(error: unknown) {
+  const message = getErrorMessage(error).toLowerCase();
+
+  if (
+    message.includes("could not find the function public.create_quote") ||
+    (message.includes("schema cache") && message.includes("create_quote"))
+  ) {
+    return "El servidor de cotizaciones necesita actualizarse. Pide aplicar las migraciones pendientes y vuelve a intentar.";
+  }
+
+  if (message.includes("a machine variant is required")) {
+    return "Selecciona una versión de la máquina antes de crear la cotización.";
+  }
+
+  if (message.includes("selected machine variant is not available")) {
+    return "La versión seleccionada ya no está disponible. Vuelve a elegirla.";
+  }
+
+  if (message.includes("selected machine does not have variants")) {
+    return "La versión seleccionada no corresponde a esta máquina.";
+  }
+
+  if (message.includes("selected machine is not available")) {
+    return "La máquina seleccionada ya no está disponible.";
+  }
+
+  if (message.includes("one or more selected add-ons are not compatible")) {
+    return "Uno o más add-ons ya no son compatibles con esta máquina.";
+  }
+
+  if (message.includes("a required add-on is missing")) {
+    return "Falta un add-on obligatorio para esta configuración.";
+  }
+
+  if (message.includes("does not support add-ons")) {
+    return "La máquina seleccionada no admite add-ons.";
+  }
+
+  if (message.includes("per_base add-on requires")) {
+    return "Esta configuración requiere una máquina con número de bases válido.";
+  }
+
+  if (message.includes("fixed and per_base add-ons must be selected once")) {
+    return "Un add-on fijo o por base tiene una cantidad no válida.";
+  }
+
+  if (message.includes("an expo account must select an active salesperson")) {
+    return "Selecciona quién está atendiendo antes de crear la cotización.";
+  }
+
+  if (message.includes("selected salesperson is not available")) {
+    return "El asesor seleccionado ya no está disponible. Elige otro para continuar.";
+  }
+
+  if (
+    message.includes("individual seller can only use their linked salesperson") ||
+    message.includes("linked salesperson is not active")
+  ) {
+    return "Tu cuenta no tiene un asesor comercial activo vinculado.";
+  }
+
+  if (message.includes("installation is required")) {
+    return "Esta máquina requiere instalación. La entrega debe quedar como Por cotizar.";
+  }
+
+  if (message.includes("shipping is required")) {
+    return "Esta máquina requiere envío. La entrega debe quedar como Por cotizar.";
+  }
+
+  if (message.includes("only active seller flow accounts can create quotes")) {
+    return "Tu sesión no tiene permiso para crear cotizaciones.";
+  }
+
+  if (message.includes("failed to find server action")) {
+    return "La aplicación se actualizó. Recarga la página e intenta nuevamente.";
+  }
+
+  return couponErrorMessage(error);
 }
 
 function validateInput(input: CreateQuoteInput) {
@@ -141,8 +233,61 @@ function validateInput(input: CreateQuoteInput) {
   }
 }
 
+async function validateMachineVariantSelection(
+  supabase: Awaited<ReturnType<typeof getSellerClient>>,
+  machineId: string,
+  machineVariantId: string | null | undefined
+) {
+  const [machineResult, variantsResult] = await Promise.all([
+    supabase
+      .from("machines")
+      .select("allowed_variant_types")
+      .eq("id", machineId)
+      .maybeSingle(),
+    supabase
+      .from("machine_variants")
+      .select("id, variant_type, active, price")
+      .eq("machine_id", machineId),
+  ]);
+
+  if (machineResult.error || variantsResult.error || !machineResult.data) {
+    throw new Error("No se pudo validar la versión seleccionada.");
+  }
+
+  const machine = machineResult.data;
+  const machineVariants = (variantsResult.data ?? []).filter((variant) =>
+    machine.allowed_variant_types.includes(variant.variant_type)
+  );
+
+  if (machineVariants.length === 0) {
+    if (machineVariantId) {
+      throw new ValidationError("La versión seleccionada no corresponde a esta máquina.");
+    }
+    return;
+  }
+
+  if (!machineVariantId) {
+    throw new ValidationError(
+      "Selecciona una versión de la máquina antes de crear la cotización."
+    );
+  }
+
+  const selectedVariant = machineVariants.find(
+    (variant) => variant.id === machineVariantId
+  );
+
+  if (!selectedVariant) {
+    throw new ValidationError("La versión seleccionada no corresponde a esta máquina.");
+  }
+
+  const price = Number(selectedVariant.price);
+  if (!selectedVariant.active || !Number.isFinite(price) || price <= 0) {
+    throw new ValidationError("La versión seleccionada ya no está disponible.");
+  }
+}
+
 function isRetryableInfrastructureError(error: unknown) {
-  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  const message = getErrorMessage(error).toLowerCase();
   return ["fetch failed", "network", "timeout", "connection", "temporarily unavailable"].some(
     (fragment) => message.includes(fragment)
   );
@@ -155,7 +300,7 @@ async function loadCreatedQuotePdfSnapshot(
   const { data: quote, error: quoteError } = await supabase
     .from("quotes")
     .select(
-      "folio, customer_id, salesperson_name_snapshot, machine_name_snapshot, machine_base_price_snapshot, machine_number_of_bases_snapshot, machine_image_url_snapshot, machine_variant_type_snapshot, machine_variant_name_snapshot, machine_variant_price_snapshot, delivery_type, delivery_note, subtotal, discount_amount, coupon_code_snapshot, coupon_name_snapshot, coupon_discount_type_snapshot, coupon_discount_value_snapshot, notes, total, created_at"
+      "folio, customer_id, salesperson_name_snapshot, machine_name_snapshot, machine_base_price_snapshot, machine_number_of_bases_snapshot, machine_image_url_snapshot, machine_variant_type_snapshot, machine_variant_name_snapshot, machine_variant_price_snapshot, machine_variant_description_snapshot, delivery_type, delivery_note, subtotal, subtotal_before_tax_snapshot, tax_rate_snapshot, tax_amount_snapshot, discount_amount, coupon_code_snapshot, coupon_name_snapshot, coupon_discount_type_snapshot, coupon_discount_value_snapshot, notes, total, created_at"
     )
     .eq("id", quoteId)
     .maybeSingle();
@@ -188,6 +333,7 @@ async function loadCreatedQuotePdfSnapshot(
   const couponDiscountValue = quote.coupon_discount_value_snapshot === null
     ? null
     : asNumber(quote.coupon_discount_value_snapshot);
+  const historicTax = calculateIncludedTaxBreakdown(asNumber(quote.total));
 
   return {
     folio: quote.folio,
@@ -199,7 +345,7 @@ async function loadCreatedQuotePdfSnapshot(
       basePrice: asNumber(quote.machine_base_price_snapshot),
       numberOfBases: quote.machine_number_of_bases_snapshot,
       imageUrl: quote.machine_image_url_snapshot,
-      variant: quote.machine_variant_type_snapshot && quote.machine_variant_name_snapshot && quote.machine_variant_price_snapshot !== null ? { type: quote.machine_variant_type_snapshot, name: quote.machine_variant_name_snapshot, price: asNumber(quote.machine_variant_price_snapshot) } : null,
+      variant: quote.machine_variant_type_snapshot && quote.machine_variant_name_snapshot && quote.machine_variant_price_snapshot !== null ? { type: quote.machine_variant_type_snapshot, name: quote.machine_variant_name_snapshot, price: asNumber(quote.machine_variant_price_snapshot), description: quote.machine_variant_description_snapshot } : null,
     },
     addons: (addonsResult.data ?? []).map((addon) => ({
       id: addon.id,
@@ -213,6 +359,14 @@ async function loadCreatedQuotePdfSnapshot(
     subtotal: asNumber(quote.subtotal),
     discountAmount: asNumber(quote.discount_amount),
     total: asNumber(quote.total),
+    tax: quote.subtotal_before_tax_snapshot !== null && quote.tax_rate_snapshot !== null && quote.tax_amount_snapshot !== null
+      ? {
+          subtotalBeforeTax: asNumber(quote.subtotal_before_tax_snapshot),
+          taxRate: asNumber(quote.tax_rate_snapshot),
+          taxAmount: asNumber(quote.tax_amount_snapshot),
+          totalWithTax: asNumber(quote.total),
+        }
+      : historicTax,
     coupon:
       quote.coupon_code_snapshot &&
       quote.coupon_name_snapshot &&
@@ -250,6 +404,18 @@ export async function validateCoupon(
     }
 
     const supabase = await getSellerClient();
+    console.info("[validateCoupon RPC request]", {
+      parameterNames: [
+        "p_machine_id",
+        "p_addon_quantities",
+        "p_coupon_code",
+        "p_machine_variant_id",
+      ],
+      machineId: input.machineId,
+      machineVariantId: input.machineVariantId ?? null,
+      salespersonId: null,
+      addonIds: Object.keys(input.addonQuantities),
+    });
     const { data, error } = await supabase.rpc("preview_quote_coupon", {
       p_machine_id: input.machineId,
       p_addon_quantities: input.addonQuantities,
@@ -259,6 +425,12 @@ export async function validateCoupon(
     const preview = Array.isArray(data) ? data[0] : null;
 
     if (error) {
+      console.error("[validateCoupon RPC error]", {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      });
       throw error;
     }
 
@@ -306,6 +478,32 @@ export async function createQuote(
     validateInput(input);
 
     const supabase = await getSellerClient();
+    await validateMachineVariantSelection(
+      supabase,
+      input.machineId,
+      input.machineVariantId
+    );
+    console.info("[createQuote RPC request]", {
+      parameterNames: [
+        "p_machine_id",
+        "p_addon_quantities",
+        "p_customer_name",
+        "p_customer_company",
+        "p_customer_whatsapp",
+        "p_customer_email",
+        "p_delivery_type",
+        "p_coupon_code",
+        "p_client_generated_id",
+        "p_client_generated_folio",
+        "p_machine_image_url_snapshot",
+        "p_machine_variant_id",
+        "p_salesperson_id",
+      ],
+      machineId: input.machineId,
+      machineVariantId: input.machineVariantId ?? null,
+      salespersonId: input.salespersonId ?? null,
+      addonIds: Object.keys(input.addonQuantities),
+    });
     const { data, error } = await supabase.rpc("create_quote", {
       p_machine_id: input.machineId,
       p_addon_quantities: input.addonQuantities,
@@ -325,6 +523,12 @@ export async function createQuote(
     const quote = Array.isArray(data) ? data[0] : null;
 
     if (error) {
+      console.error("[createQuote RPC error]", {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      });
       throw error;
     }
 
@@ -356,8 +560,8 @@ export async function createQuote(
 
     return {
       error:
-        couponErrorMessage(error) ??
-        "No se pudo crear la cotización. Revisa que la máquina y los add-ons sigan disponibles.",
+        createQuoteErrorMessage(error) ??
+        "No se pudo crear la cotización. Intenta nuevamente o actualiza la aplicación.",
       retryable: isRetryableInfrastructureError(error),
     };
   }

@@ -107,6 +107,24 @@ class NahuitechOfflineDatabase extends Dexie {
       offlineWhatsAppTasks: "&localId, &quoteLocalId, sellerId, status, updatedAt",
       metadata: "&key, updatedAt",
     });
+
+    // Version 6 carries the explicit IVA and variant-description snapshots.
+    // Indexed fields are unchanged, so existing local quotes remain intact.
+    this.version(6).stores({
+      machines: "&id, slug, sortOrder",
+      addons: "&id",
+      machineAddons: "[machineId+addonId], machineId, addonId",
+      machineVariants: "&id, machineId, active, sortOrder",
+      coupons: "&id, &code",
+      couponMachines: "[couponId+machineId], couponId, machineId",
+      sellerProfiles: "&id",
+      salespeople: "&id, active, sortOrder",
+      offlineCustomers: "&localId, sellerId, createdAt",
+      offlineQuotes: "&localId, &clientGeneratedId, sellerId, salespersonId, syncStatus, createdAt, remoteId",
+      syncQueue: "&localId, quoteLocalId, sellerId, updatedAt",
+      offlineWhatsAppTasks: "&localId, &quoteLocalId, sellerId, status, updatedAt",
+      metadata: "&key, updatedAt",
+    });
   }
 }
 

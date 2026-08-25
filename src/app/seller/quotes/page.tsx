@@ -18,7 +18,7 @@ export default async function SellerQuotesPage() {
   const { data: quoteRows, error: quotesError } = await supabase
     .from("quotes")
     .select(
-      "id, folio, customer_id, salesperson_name_snapshot, machine_name_snapshot, total, status, created_at"
+      "id, folio, customer_id, salesperson_name_snapshot, machine_name_snapshot, machine_variant_name_snapshot, total, status, created_at"
     )
     .order("created_at", { ascending: false });
 
@@ -59,7 +59,7 @@ export default async function SellerQuotesPage() {
                   <div className="min-w-0">
                     <p className="font-bold text-foreground">{quote.folio}</p>
                     <p className="mt-1 truncate text-sm text-muted">
-                      {customerNames.get(quote.customer_id) ?? "Cliente"} · {quote.machine_name_snapshot} · {quote.salesperson_name_snapshot ?? "Vendedor"}
+                      {customerNames.get(quote.customer_id) ?? "Cliente"} · {quote.machine_name_snapshot}{quote.machine_variant_name_snapshot ? ` · ${quote.machine_variant_name_snapshot}` : ""} · {quote.salesperson_name_snapshot ?? "Vendedor"}
                     </p>
                   </div>
                   <p className="font-black text-foreground">

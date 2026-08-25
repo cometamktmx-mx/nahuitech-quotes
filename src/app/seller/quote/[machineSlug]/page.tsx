@@ -25,7 +25,7 @@ export default async function SellerQuotePage({ params }: SellerQuotePageProps) 
   const { data: machine, error: machineError } = await supabase
     .from("machines")
     .select(
-      "id, name, slug, short_description, base_price, number_of_bases, supports_addons, delivery_policy, image_url, sort_order"
+      "id, name, slug, short_description, base_price, number_of_bases, supports_addons, delivery_policy, variant_selection_required, allowed_variant_types, image_url, sort_order"
     )
     .eq("slug", machineSlug)
     .eq("active", true)
@@ -48,6 +48,8 @@ export default async function SellerQuotePage({ params }: SellerQuotePageProps) 
     numberOfBases: machine.number_of_bases,
     supportsAddons: machine.supports_addons,
     deliveryPolicy: machine.delivery_policy,
+    variantSelectionRequired: machine.variant_selection_required,
+    allowedVariantTypes: machine.allowed_variant_types,
     imageUrl: machine.image_url,
     sortOrder: machine.sort_order,
   };
@@ -104,7 +106,7 @@ export default async function SellerQuotePage({ params }: SellerQuotePageProps) 
 
   const { data: variantRows, error: variantsError } = await supabase
     .from("machine_variants")
-    .select("id, machine_id, variant_type, display_name, price, active, sort_order")
+    .select("id, machine_id, variant_type, display_name, price, description, active, sort_order")
     .eq("machine_id", selectedMachine.id)
     .order("sort_order");
 
@@ -118,6 +120,7 @@ export default async function SellerQuotePage({ params }: SellerQuotePageProps) 
     variantType: variant.variant_type,
     displayName: variant.display_name,
     price: variant.price === null ? null : asCatalogNumber(variant.price),
+    description: variant.description,
     active: variant.active,
     sortOrder: variant.sort_order,
   }));

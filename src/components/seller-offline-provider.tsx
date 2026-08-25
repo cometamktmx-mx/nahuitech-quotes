@@ -35,8 +35,8 @@ type SellerOfflineState = {
 };
 
 const SellerOfflineContext = createContext<SellerOfflineState | null>(null);
-const sellerDocumentCache = "nahuitech-seller-documents-v3";
-const staticCache = "nahuitech-static-v3";
+const sellerDocumentCache = "nahuitech-seller-documents-v4";
+const staticCache = "nahuitech-static-v4";
 
 function isConnectivityError(error: unknown) {
   if (error instanceof TypeError) return true;

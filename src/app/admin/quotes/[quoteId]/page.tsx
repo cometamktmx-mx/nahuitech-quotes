@@ -118,6 +118,7 @@ export default async function AdminQuoteDetailPage({
           status: whatsappResult.data?.status ?? null,
           destination: whatsappResult.data?.customer_whatsapp_snapshot ?? null,
           error: whatsappResult.data?.error_message ?? null,
+          admin: true,
         }}
       />
     </div>

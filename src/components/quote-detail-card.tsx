@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { QuotePdfDownloadButton } from "@/components/quote-pdf-download-button";
 import { QuoteWhatsAppButton } from "@/components/quote-whatsapp-button";
+import { AdminWhatsAppRescue } from "@/components/admin-whatsapp-rescue";
 import type { QuotePdfSnapshot } from "@/lib/pdf/quote-pdf-types";
 import { calculateIncludedTaxBreakdown, grossToNet, netDiscount } from "@/lib/quotes/tax";
 
@@ -90,9 +91,10 @@ export function QuoteDetailCard({
   sellerName?: string;
   whatsapp?: {
     quoteId: string;
-    status: "PENDING" | "SENDING" | "SENT" | "DELIVERED" | "READ" | "FAILED" | null;
+    status: "PENDING" | "SENDING" | "SENT" | "DELIVERED" | "READ" | "FAILED" | "MANUAL_SENT" | null;
     destination: string | null;
     error: string | null;
+    admin?: boolean;
   };
 }) {
   const couponBenefit = quote.couponDiscountType === "PERCENTAGE"
@@ -161,6 +163,7 @@ export function QuoteDetailCard({
       <div className="grid gap-3 sm:flex sm:flex-wrap">
         <QuotePdfDownloadButton className="w-full sm:w-fit" snapshot={pdfSnapshot} />
         {whatsapp ? <QuoteWhatsAppButton initialDestination={whatsapp.destination} initialError={whatsapp.error} initialStatus={whatsapp.status} quoteId={whatsapp.quoteId} /> : null}
+        {whatsapp?.admin ? <AdminWhatsAppRescue quoteId={whatsapp.quoteId} status={whatsapp.status} /> : null}
       </div>
       <Link className="inline-flex min-h-11 w-fit items-center rounded-xl px-3 text-sm font-bold text-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" href={backHref}>← {backLabel}</Link>
       <section className="overflow-hidden rounded-3xl border border-border bg-surface shadow-[var(--shadow-card)]">

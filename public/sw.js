@@ -1,6 +1,7 @@
-const APP_SHELL_CACHE = "nahuitech-app-shell-v4";
-const SELLER_DOCUMENT_CACHE = "nahuitech-seller-documents-v4";
-const STATIC_CACHE = "nahuitech-static-v4";
+const APP_SHELL_CACHE = "nahuitech-app-shell-v5";
+const SELLER_DOCUMENT_CACHE = "nahuitech-seller-documents-v5";
+const STATIC_CACHE = "nahuitech-static-v5";
+const MACHINE_IMAGE_CACHE = "nahuitech-machine-images-v1";
 const CACHE_PREFIX = "nahuitech-";
 const APP_SHELL = [
   "/manifest.webmanifest",
@@ -32,7 +33,7 @@ self.addEventListener("activate", (event) => {
             .filter(
               (key) =>
                 key.startsWith(CACHE_PREFIX) &&
-                ![APP_SHELL_CACHE, SELLER_DOCUMENT_CACHE, STATIC_CACHE].includes(key)
+                ![APP_SHELL_CACHE, SELLER_DOCUMENT_CACHE, STATIC_CACHE, MACHINE_IMAGE_CACHE].includes(key)
             )
             .map((key) => caches.delete(key))
         )
@@ -77,6 +78,19 @@ async function sellerNavigation(request) {
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
+
+  if (request.method === "GET" && url.pathname.startsWith("/storage/v1/object/public/machine-images/")) {
+    event.respondWith(caches.open(MACHINE_IMAGE_CACHE).then(async (cache) => {
+      if (request.cache !== "reload") {
+        const cached = await cache.match(request);
+        if (cached) return cached;
+      }
+      const response = await fetch(request);
+      if (response.ok && response.type !== "opaque") await cache.put(request, response.clone());
+      return response;
+    }));
+    return;
+  }
 
   if (
     request.method !== "GET" ||

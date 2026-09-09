@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/client";
 
 import { offlineDb } from "./offline-db";
+import { cacheMachineImage } from "./machine-image-cache";
 import type {
   OfflineAddon,
   OfflineCoupon,
@@ -200,6 +201,14 @@ async function syncOfflineCatalogInternal() {
     updatedAt: syncedAt,
   };
 
+  // Do not report a prepared catalogue until its photographs are available offline.
+  await cacheMachineImage("/brand/NAHUITECH%20LOGO.png");
+  for (const machine of machines) {
+    if (machine.imageUrl) {
+      try { await cacheMachineImage(machine.imageUrl, true); }
+      catch { throw new Error(`No se pudo preparar la fotografía de ${machine.name}. Reintenta la sincronización.`); }
+    }
+  }
   // Only replace the local snapshot after every remote list was read successfully.
   await offlineDb.transaction(
     "rw",
@@ -361,6 +370,7 @@ export async function clearOfflineSellerSession() {
       caches.delete("nahuitech-seller-documents-v2"),
       caches.delete("nahuitech-seller-documents-v3"),
       caches.delete("nahuitech-seller-documents-v4"),
+      caches.delete("nahuitech-seller-documents-v5"),
     ]);
   }
 }

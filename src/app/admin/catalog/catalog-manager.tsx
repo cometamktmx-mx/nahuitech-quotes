@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type FormEvent, type ReactNode, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import {
@@ -154,6 +154,12 @@ function MachineEditor({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [removePhoto, setRemovePhoto] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  useEffect(() => {
+    return () => { if (photoPreview) URL.revokeObjectURL(photoPreview); };
+  }, [photoPreview]);
   const [errorMessage, setErrorMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -161,7 +167,12 @@ function MachineEditor({
     event.preventDefault();
     setErrorMessage("");
     setIsSaving(true);
-    const result = await saveMachine(new FormData(event.currentTarget));
+    const data = new FormData(event.currentTarget);
+    data.set("removePhoto", removePhoto ? "yes" : "no");
+    if (photo) data.set("machinePhoto", photo);
+    let result;
+    try { result = await saveMachine(data); }
+    catch { result = { error: "No se pudo guardar. Revisa tu conexión e intenta nuevamente." }; }
     setIsSaving(false);
 
     if (result.error) {
@@ -175,6 +186,7 @@ function MachineEditor({
   return (
     <EditorShell description="Define los datos técnicos y comerciales de la máquina." onClose={onClose} title={machine ? "Editar máquina" : "Nueva máquina"}>
       <form className="grid gap-6" onSubmit={handleSubmit}>
+        <p className="rounded-xl bg-primary/10 p-3 text-sm">Los precios incluyen IVA. El cotizador mostrará automáticamente el valor antes de IVA. Esto aplica también a versiones y precios especiales.</p>
         <input name="id" type="hidden" value={machine?.id ?? ""} />
         <input name="variantSelectionRequired" type="hidden" value={machine?.variantSelectionRequired === false ? "" : "on"} />
         <input name="allowedVariantTypes" type="hidden" value={(machine?.allowedVariantTypes ?? ["AUTOMATIC", "SEMI_AUTOMATIC"]).join(",")} />
@@ -198,7 +210,7 @@ function MachineEditor({
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">Configuración comercial</p>
           <div className="mt-4 grid gap-5 md:grid-cols-2">
             <label className="grid gap-2">
-              <FieldLabel>Precio base</FieldLabel>
+              <FieldLabel>Precio base · con IVA incluido</FieldLabel>
               <div className="flex min-h-12 overflow-hidden rounded-xl border border-border bg-surface focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10">
                 <span className="grid w-12 place-items-center border-r border-border text-sm font-bold text-muted">$</span>
                 <input className="min-w-0 flex-1 bg-transparent px-4 text-base outline-none" defaultValue={machine?.basePrice} min="0" name="basePrice" required step="0.01" type="number" />
@@ -208,10 +220,27 @@ function MachineEditor({
               <FieldLabel>Número de bases</FieldLabel>
               <input className="min-h-12 rounded-xl border border-border bg-surface px-4 text-base outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10" defaultValue={machine?.numberOfBases ?? ""} min="1" name="numberOfBases" placeholder="No aplica" step="1" type="number" />
             </label>
-            <label className="grid gap-2">
-              <FieldLabel>Image URL</FieldLabel>
-              <input className="min-h-12 rounded-xl border border-border bg-surface px-4 text-base outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10" defaultValue={machine?.imageUrl ?? ""} name="imageUrl" placeholder="/machines/... o https://..." />
-            </label>
+            <section className="grid gap-3">
+              <FieldLabel>Fotografía</FieldLabel>
+              {(photo ? photoPreview : !removePhoto ? machine?.imageUrl : null) ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img className="h-48 w-full rounded-xl bg-surface-muted object-contain" alt="Vista previa de la máquina" src={(photo ? photoPreview : machine?.imageUrl) ?? undefined} />
+              ) : <div className="grid h-40 place-items-center rounded-xl bg-surface-muted text-muted">Sin fotografía</div>}
+              <label className="grid min-h-12 cursor-pointer gap-2 rounded-xl border border-border p-3 font-bold">
+                {photo || (!removePhoto && machine?.imageUrl) ? "Cambiar fotografía" : "Subir fotografía"}
+                <input accept="image/png,image/jpeg,image/webp" disabled={isSaving} type="file" onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 8 * 1024 * 1024) {
+                    setErrorMessage("Selecciona PNG, JPG o WEBP de hasta 8 MB."); event.target.value = ""; return;
+                  }
+                  setErrorMessage(""); setPhotoPreview(URL.createObjectURL(file)); setPhoto(file); setRemovePhoto(false);
+                  event.target.value = "";
+                }} />
+              </label>
+              <p className="text-sm text-muted">PNG, JPG o WEBP · Hasta 8 MB. Se optimiza al guardar.</p>
+              {(photo || (!removePhoto && machine?.imageUrl)) ? <SecondaryButton disabled={isSaving} onClick={() => { setPhoto(null); setPhotoPreview(null); setRemovePhoto(true); }}>Eliminar fotografía</SecondaryButton> : null}
+            </section>
             <label className="grid gap-2">
               <FieldLabel>Orden de aparición</FieldLabel>
               <input className="min-h-12 rounded-xl border border-border bg-surface px-4 text-base outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10" defaultValue={machine?.sortOrder ?? 0} min="0" name="sortOrder" required step="1" type="number" />
@@ -225,7 +254,7 @@ function MachineEditor({
               <option value="SHIPPING_ONLY">Solo envío</option>
             </select>
           </label>
-          {machine?.variants.length ? <section className="mt-6 border-t border-border pt-6"><p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">Versiones</p><p className="mt-2 text-sm leading-6 text-muted">El precio comercial se toma de la versión activa. La selección del vendedor respeta las versiones aplicables configuradas para esta máquina.</p><div className="mt-4 grid gap-4 md:grid-cols-2">{machine.variants.map((variant) => { const isCommerciallyAllowed = machine.allowedVariantTypes.includes(variant.variantType); return <div className="rounded-2xl border border-border bg-surface-muted/50 p-4" key={variant.id}><input name="variantIds" type="hidden" value={variant.id} /><input name={`variantType:${variant.id}`} type="hidden" value={variant.variantType} /><p className="font-bold text-foreground">{variant.displayName}</p>{!isCommerciallyAllowed ? <p className="mt-1 text-sm font-semibold text-muted">No aplicable comercialmente</p> : null}<label className="mt-3 grid gap-2"><FieldLabel>Precio</FieldLabel><input className="min-h-11 rounded-xl border border-border bg-surface px-3 disabled:cursor-not-allowed disabled:opacity-60" defaultValue={variant.price ?? ""} disabled={!isCommerciallyAllowed} min="0.01" name={`variantPrice:${variant.id}`} placeholder="Sin precio" step="0.01" type="number" /></label><label className="mt-3 grid gap-2"><FieldLabel>Descripción comercial</FieldLabel><textarea className="min-h-24 rounded-xl border border-border bg-surface px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60" defaultValue={variant.description ?? ""} disabled={!isCommerciallyAllowed} name={`variantDescription:${variant.id}`} placeholder="Descripción de esta versión" /></label><ToggleField defaultChecked={variant.active} description="Solo puede estar disponible con precio válido." disabled={!isCommerciallyAllowed} name={`variantActive:${variant.id}`} title="Disponible" /></div>; })}</div></section> : null}
+          {machine?.variants.length ? <section className="mt-6 border-t border-border pt-6"><p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">Versiones</p><p className="mt-2 text-sm leading-6 text-muted">El precio comercial se toma de la versión activa. La selección del vendedor respeta las versiones aplicables configuradas para esta máquina.</p><div className="mt-4 grid gap-4 md:grid-cols-2">{machine.variants.map((variant) => { const isCommerciallyAllowed = machine.allowedVariantTypes.includes(variant.variantType); return <div className="rounded-2xl border border-border bg-surface-muted/50 p-4" key={variant.id}><input name="variantIds" type="hidden" value={variant.id} /><input name={`variantType:${variant.id}`} type="hidden" value={variant.variantType} /><p className="font-bold text-foreground">{variant.displayName}</p>{!isCommerciallyAllowed ? <p className="mt-1 text-sm font-semibold text-muted">No aplicable comercialmente</p> : null}<label className="mt-3 grid gap-2"><FieldLabel>Precio con IVA incluido</FieldLabel><input className="min-h-11 rounded-xl border border-border bg-surface px-3 disabled:cursor-not-allowed disabled:opacity-60" defaultValue={variant.price ?? ""} disabled={!isCommerciallyAllowed} min="0.01" name={`variantPrice:${variant.id}`} placeholder="Sin precio" step="0.01" type="number" /></label><label className="mt-3 grid gap-2"><FieldLabel>Descripción comercial</FieldLabel><textarea className="min-h-24 rounded-xl border border-border bg-surface px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60" defaultValue={variant.description ?? ""} disabled={!isCommerciallyAllowed} name={`variantDescription:${variant.id}`} placeholder="Descripción de esta versión" /></label><ToggleField defaultChecked={variant.active} description="Solo puede estar disponible con precio válido." disabled={!isCommerciallyAllowed} name={`variantActive:${variant.id}`} title="Disponible" /></div>; })}</div></section> : null}
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
@@ -277,6 +306,7 @@ function AddonEditor({
   return (
     <EditorShell description="Configura el precio, el tipo de cálculo y dónde estará disponible." onClose={onClose} title={addon ? "Editar add-on" : "Nuevo add-on"}>
       <form className="grid gap-6" onSubmit={handleSubmit}>
+        <p className="rounded-xl bg-primary/10 p-3 text-sm">Los precios incluyen IVA. El cotizador mostrará automáticamente el valor antes de IVA. Esto aplica también a versiones y precios especiales.</p>
         <input name="id" type="hidden" value={addon?.id ?? ""} />
 
         <div className="grid gap-5 md:grid-cols-2">
@@ -285,7 +315,7 @@ function AddonEditor({
             <input className="min-h-12 rounded-xl border border-border bg-surface px-4 text-base outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10" defaultValue={addon?.name} name="name" required />
           </label>
           <label className="grid gap-2">
-            <FieldLabel>Precio unitario</FieldLabel>
+            <FieldLabel>Precio unitario · con IVA incluido</FieldLabel>
             <div className="flex min-h-12 overflow-hidden rounded-xl border border-border bg-surface focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10">
               <span className="grid w-12 place-items-center border-r border-border text-sm font-bold text-muted">$</span>
               <input className="min-w-0 flex-1 bg-transparent px-4 text-base outline-none" defaultValue={addon?.unitPrice} min="0" name="unitPrice" required step="0.01" type="number" />
@@ -358,7 +388,7 @@ function AddonEditor({
                       <span className="grid size-6 place-items-center rounded-full border border-border text-transparent transition peer-checked:border-primary peer-checked:bg-primary peer-checked:text-primary-foreground">✓</span>
                     </span>
                   </label>
-                  {machine.supportsAddons ? <div className="grid gap-2 rounded-xl bg-surface-muted/60 p-3"><input className="min-h-11 rounded-lg border border-border bg-surface px-3 text-sm outline-none focus:border-primary" defaultValue={compatibility?.unitPriceOverride ?? ""} min="0" name={`unitPriceOverride:${machine.id}`} placeholder="Precio especial (opcional)" step="0.01" type="number" /><textarea className="min-h-18 rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary" defaultValue={compatibility?.descriptionOverride ?? ""} name={`descriptionOverride:${machine.id}`} placeholder="Descripción específica (opcional)" /></div> : null}
+                  {machine.supportsAddons ? <div className="grid gap-2 rounded-xl bg-surface-muted/60 p-3"><input className="min-h-11 rounded-lg border border-border bg-surface px-3 text-sm outline-none focus:border-primary" defaultValue={compatibility?.unitPriceOverride ?? ""} min="0" name={`unitPriceOverride:${machine.id}`} placeholder="Precio especial con IVA (opcional)" step="0.01" type="number" /><textarea className="min-h-18 rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary" defaultValue={compatibility?.descriptionOverride ?? ""} name={`descriptionOverride:${machine.id}`} placeholder="Descripción específica (opcional)" /></div> : null}
                 </div>
               );
             })}

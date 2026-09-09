@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 
+import { snapshotItems } from "../quotes/items";
 import { generateQuotePdf } from "./quote-pdf";
 import type { QuotePdfSnapshot } from "./quote-pdf-types";
 
@@ -63,13 +64,27 @@ async function loadCroppedLogo() {
 }
 
 async function loadLocalMachineImage(imageUrl: string | null): Promise<Uint8Array | undefined> {
-  if (!imageUrl?.startsWith("/machines/")) return undefined;
+  if (!imageUrl) return undefined;
+  if (!imageUrl.startsWith("/machines/")) {
+    try {
+      const url = new URL(imageUrl);
+      const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      if (!base || url.origin !== new URL(base).origin ||
+        !url.pathname.startsWith("/storage/v1/object/public/machine-images/")) return undefined;
+      const response = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(15000) });
+      if (!response.ok) return undefined;
+      const bytes = await response.arrayBuffer();
+      if (bytes.byteLength > 8 * 1024 * 1024) return undefined;
+      return new Uint8Array(await sharp(Buffer.from(bytes), { limitInputPixels: 40_000_000 }).png().toBuffer());
+    } catch { return undefined; }
+  }
 
   const filename = imageUrl.slice("/machines/".length);
-  if (!/^[a-z0-9-]+\.(?:png|jpe?g)$/i.test(filename)) return undefined;
+  if (!/^[a-z0-9-]+\.(?:png|jpe?g|webp)$/i.test(filename)) return undefined;
 
   try {
-    return new Uint8Array(await readFile(path.join(machinesDirectory, filename)));
+    const bytes = await readFile(path.join(machinesDirectory, filename));
+    return new Uint8Array(await sharp(bytes).png().toBuffer());
   } catch {
     return undefined;
   }
@@ -80,5 +95,6 @@ export async function generateQuotePdfOnServer(snapshot: QuotePdfSnapshot) {
     loadCroppedLogo(),
     loadLocalMachineImage(snapshot.machine.imageUrl),
   ]);
-  return generateQuotePdf(snapshot, { logoBytes, machineImageBytes });
+  const itemImageBytes = await Promise.all(snapshotItems(snapshot).map(async (item) => (await loadLocalMachineImage(item.machine.imageUrl)) ?? new Uint8Array()));
+  return generateQuotePdf(snapshot, { logoBytes, machineImageBytes: machineImageBytes ?? new Uint8Array(), itemImageBytes });
 }

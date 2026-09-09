@@ -1,4 +1,6 @@
 "use client";
+import { grossToNet, netDiscount, calculateIncludedTaxBreakdown } from "@/lib/quotes/tax";
+
 
 import { type FormEvent, useState } from "react";
 
@@ -24,6 +26,7 @@ const currencyFormatter = new Intl.NumberFormat("es-MX", {
 });
 
 export function SellerCouponPanel({
+  items,
   machineId,
   addonQuantities,
   machineVariantId,
@@ -32,6 +35,7 @@ export function SellerCouponPanel({
   onCouponCodeChange,
   onAppliedCoupon,
 }: {
+  items?: import("@/lib/quotes/items").QuoteItemInput[];
   machineId: string;
   addonQuantities: Record<string, number>;
   machineVariantId: string | null;
@@ -52,15 +56,15 @@ export function SellerCouponPanel({
 
     try {
       result = offline && !offline.isOnline
-        ? await previewOfflineCoupon({ machineId, addonQuantities, couponCode, machineVariantId })
-        : await validateCoupon({ machineId, addonQuantities, couponCode, machineVariantId });
+        ? await previewOfflineCoupon({ items, machineId, addonQuantities, couponCode, machineVariantId })
+        : await validateCoupon({ items, machineId, addonQuantities, couponCode, machineVariantId });
 
       if (result.error && result.retryable) {
-        result = await previewOfflineCoupon({ machineId, addonQuantities, couponCode, machineVariantId });
+        result = await previewOfflineCoupon({ items, machineId, addonQuantities, couponCode, machineVariantId });
       }
     } catch (error) {
       try {
-        result = await previewOfflineCoupon({ machineId, addonQuantities, couponCode, machineVariantId });
+        result = await previewOfflineCoupon({ items, machineId, addonQuantities, couponCode, machineVariantId });
       } catch {
         setIsApplying(false);
         onAppliedCoupon(null);
@@ -135,8 +139,10 @@ export function SellerCouponPanel({
             </p>
           </div>
           <div className="grid gap-2 border-t border-success/20 pt-3 text-sm">
-            <div className="flex justify-between gap-3"><span className="text-muted">Subtotal</span><span className="font-bold text-foreground">{currencyFormatter.format(appliedCoupon.subtotal)}</span></div>
-            <div className="flex justify-between gap-3"><span className="text-success">Descuento Expo</span><span className="font-bold text-success">− {currencyFormatter.format(appliedCoupon.discountAmount)}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-muted">Precio configuración</span><span className="font-bold text-foreground">{currencyFormatter.format(grossToNet(appliedCoupon.subtotal))}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-success">Descuento Expo</span><span className="font-bold text-success">− {currencyFormatter.format(netDiscount(appliedCoupon.subtotal, appliedCoupon.total))}</span></div>
+            <div className="flex justify-between gap-3"><span>Subtotal</span><span>{currencyFormatter.format(grossToNet(appliedCoupon.total))}</span></div>
+            <div className="flex justify-between gap-3"><span>IVA 16%</span><span>{currencyFormatter.format(calculateIncludedTaxBreakdown(appliedCoupon.total).taxAmount)}</span></div>
             <div className="flex justify-between gap-3 border-t border-success/20 pt-3"><span className="font-bold text-foreground">TOTAL</span><span className="font-black text-foreground">{currencyFormatter.format(appliedCoupon.total)} MXN</span></div>
           </div>
         </div>

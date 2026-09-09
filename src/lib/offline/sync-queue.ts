@@ -28,6 +28,7 @@ export async function syncPendingOfflineQuotes(sellerId: string) {
 
     try {
       const result = await createQuote({
+        items: quote.items,
         machineId: quote.machineId,
         addonQuantities:
           quote.selectedAddonQuantities ??

@@ -1,5 +1,7 @@
 "use server";
 
+import { logMachineImageStorageError, uploadMachineImage } from "@/lib/machine-images.server";
+
 import { revalidatePath } from "next/cache";
 
 import { getAdminClient } from "@/lib/auth/get-admin-client";
@@ -88,30 +90,6 @@ function nonNegativeInteger(value: FormDataEntryValue | null, fieldName: string)
   }
 
   return parsed;
-}
-
-function imageUrl(value: FormDataEntryValue | null) {
-  const url = optionalText(value);
-
-  if (!url) {
-    return null;
-  }
-
-  if (/^\/machines\/[a-z0-9-]+\.(?:png|jpg|jpeg|webp)$/i.test(url)) {
-    return url;
-  }
-
-  try {
-    const parsed = new URL(url);
-
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      throw new Error();
-    }
-  } catch {
-    throw new ValidationError("La imagen debe ser una URL http(s) o un asset local de /machines.");
-  }
-
-  return url;
 }
 
 function actionError(error: unknown, fallback: string): CatalogActionResult {
@@ -246,33 +224,49 @@ export async function saveMachine(
       delivery_policy: requiredText(formData.get("deliveryPolicy"), "La política de entrega"),
       variant_selection_required: formData.get("variantSelectionRequired") === "on",
       allowed_variant_types: allowedVariantTypes(formData.get("allowedVariantTypes")),
-      image_url: imageUrl(formData.get("imageUrl")),
+
       active: formData.get("active") === "on",
       sort_order: nonNegativeInteger(formData.get("sortOrder"), "El orden"),
     };
     const supabase = await getAdminClient();
-    let savedMachineId = id;
-
     if (!["FLEXIBLE", "INSTALLATION_REQUIRED", "SHIPPING_ONLY"].includes(payload.delivery_policy)) {
       throw new ValidationError("La política de entrega no es válida.");
     }
+    let savedMachineId = id ?? crypto.randomUUID();
+    const photo = formData.get("machinePhoto");
+    let uploaded: { path: string; url: string } | undefined;
+    if (photo instanceof File && photo.size > 0) {
+      try { uploaded = await uploadMachineImage(supabase, savedMachineId, photo); }
+      catch (error) { throw new ValidationError(error instanceof Error ? error.message : "No se pudo procesar la fotografía."); }
+    }
+    const imageChange = uploaded ? { image_url: uploaded.url }
+      : formData.get("removePhoto") === "yes" ? { image_url: null } : {};
+    const machinePayload = { ...payload, ...imageChange };
 
     if (id) {
       const { data, error } = await supabase
         .from("machines")
-        .update(payload)
+        .update(machinePayload)
         .eq("id", id)
         .select("id")
         .maybeSingle();
 
       if (error || !data) {
+        if (uploaded) {
+          const { error: cleanupError } = await supabase.storage.from("machine-images").remove([uploaded.path]);
+          if (cleanupError) logMachineImageStorageError('[machine image cleanup error]', cleanupError);
+        }
         throw new Error("No se pudo actualizar la máquina.");
       }
       savedMachineId = data.id;
     } else {
-      const { data, error } = await supabase.from("machines").insert(payload).select("id").single();
+      const { data, error } = await supabase.from("machines").insert({ ...machinePayload, id: savedMachineId }).select("id").single();
 
       if (error || !data) {
+        if (uploaded) {
+          const { error: cleanupError } = await supabase.storage.from("machine-images").remove([uploaded.path]);
+          if (cleanupError) logMachineImageStorageError('[machine image cleanup error]', cleanupError);
+        }
         throw new Error("No se pudo crear la máquina.");
       }
       savedMachineId = data.id;
@@ -301,6 +295,7 @@ export async function saveMachine(
       if (error) throw new Error("No se pudo guardar una versión de máquina.");
     }
 
+    revalidatePath("/seller", "layout");
     revalidatePath("/admin/catalog");
     return {};
   } catch (error) {

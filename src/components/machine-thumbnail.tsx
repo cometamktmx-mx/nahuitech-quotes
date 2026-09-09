@@ -1,3 +1,8 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { cacheMachineImage } from "@/lib/offline/machine-image-cache";
+
 type MachineThumbnailProps = {
   name: string;
   imageUrl: string | null;
@@ -15,12 +20,24 @@ function MachineIcon() {
 }
 
 export function MachineThumbnail({ name, imageUrl, className = "" }: MachineThumbnailProps) {
+  const [cached, setCached] = useState<{ source: string; url: string } | null>(null);
+  useEffect(() => {
+    if (!imageUrl) return;
+    let disposed = false;
+    let objectUrl: string | undefined;
+    cacheMachineImage(imageUrl).then((response) => response.blob()).then((blob) => {
+      if (disposed) return;
+      objectUrl = URL.createObjectURL(blob);
+      setCached({ source: imageUrl, url: objectUrl });
+    }).catch(() => { /* Native image loading still supports legacy URLs. */ });
+    return () => { disposed = true; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [imageUrl]);
   if (imageUrl) {
     return (
       <div className={`relative overflow-hidden bg-surface-muted ${className}`}>
         {/* External image URLs are catalog data and do not require a Next image loader. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img alt={name} className="size-full object-contain p-3 sm:p-5" src={imageUrl} />
+        <img alt={name} className="size-full object-contain p-3 sm:p-5" src={cached?.source === imageUrl ? cached.url : imageUrl} />
       </div>
     );
   }

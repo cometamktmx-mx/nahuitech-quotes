@@ -6,9 +6,13 @@ import { getSellerClient } from "@/lib/auth/get-seller-client";
 import type { QuotePdfSnapshot } from "@/lib/pdf/quote-pdf-types";
 import { calculateIncludedTaxBreakdown } from "@/lib/quotes/tax";
 
+import { rpcItems, type QuoteItemInput } from "@/lib/quotes/items";
+import { loadQuoteItems } from "@/lib/quotes/load-items";
+
 type DeliveryType = "SHIPPING" | "INSTALLATION" | "LATER";
 
 type CreateQuoteInput = {
+  items?: QuoteItemInput[];
   machineId: string;
   addonQuantities: Record<string, number>;
   customerName: string;
@@ -80,12 +84,21 @@ function validateConfiguration(machineId: unknown, addonQuantities: unknown) {
   }
 }
 
+function isMachineStorageUrl(value: string) {
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!base) return false;
+  try {
+    const url = new URL(value);
+    return url.origin === new URL(base).origin && /^\/storage\/v1\/object\/public\/machine-images\/machines\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.jpg$/.test(url.pathname) && !url.search && !url.hash;
+  } catch { return false; }
+}
+
 function validateMachineImageUrlSnapshot(value: unknown) {
   if (value === undefined || value === null || value === "") return null;
 
   if (
     typeof value !== "string" ||
-    !/^\/machines\/[a-z0-9-]+\.(?:png|jpe?g)$/i.test(value)
+    (!/^\/machines\/[a-z0-9-]+\.(?:png|jpe?g|webp)$/i.test(value) && !isMachineStorageUrl(value))
   ) {
     throw new ValidationError("La imagen de la máquina no es válida.");
   }
@@ -203,8 +216,18 @@ function createQuoteErrorMessage(error: unknown) {
   return couponErrorMessage(error);
 }
 
+function validateItems(items: QuoteItemInput[]) {
+  if (!Array.isArray(items) || items.length < 1 || items.length > 100) throw new ValidationError("Agrega entre 1 y 100 equipos.");
+  for (const item of items) {
+    validateConfiguration(item.machineId, item.addonQuantities);
+    if (!Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.quantity > 10000) throw new ValidationError("Cantidad de equipos inválida.");
+    if (item.machineVariantId && !uuidPattern.test(item.machineVariantId)) throw new ValidationError("Versión inválida.");
+  }
+}
+
 function validateInput(input: CreateQuoteInput) {
   validateConfiguration(input.machineId, input.addonQuantities);
+  if (input.items) validateItems(input.items);
 
   requiredText(input.customerName, "El nombre");
   requiredText(input.customerWhatsapp, "WhatsApp");
@@ -336,6 +359,7 @@ async function loadCreatedQuotePdfSnapshot(
   const historicTax = calculateIncludedTaxBreakdown(asNumber(quote.total));
 
   return {
+    items: await loadQuoteItems(supabase, quoteId),
     folio: quote.folio,
     createdAt: quote.created_at,
     customer: customerResult.data,
@@ -389,7 +413,7 @@ async function loadCreatedQuotePdfSnapshot(
 }
 
 export async function validateCoupon(
-  input: Pick<CreateQuoteInput, "machineId" | "addonQuantities" | "couponCode" | "machineVariantId">
+  input: Pick<CreateQuoteInput, "machineId" | "addonQuantities" | "couponCode" | "machineVariantId" | "items">
 ): Promise<CouponPreviewResult> {
   try {
     validateConfiguration(input.machineId, input.addonQuantities);
@@ -416,7 +440,7 @@ export async function validateCoupon(
       salespersonId: null,
       addonIds: Object.keys(input.addonQuantities),
     });
-    const { data, error } = await supabase.rpc("preview_quote_coupon", {
+    const { data, error } = await supabase.rpc(input.items ? "preview_multi_quote_coupon" : "preview_quote_coupon", input.items ? { p_items: rpcItems(input.items), p_coupon_code: couponCode } : {
       p_machine_id: input.machineId,
       p_addon_quantities: input.addonQuantities,
       p_coupon_code: couponCode,
@@ -478,7 +502,7 @@ export async function createQuote(
     validateInput(input);
 
     const supabase = await getSellerClient();
-    await validateMachineVariantSelection(
+    if (!input.items) await validateMachineVariantSelection(
       supabase,
       input.machineId,
       input.machineVariantId
@@ -504,9 +528,13 @@ export async function createQuote(
       salespersonId: input.salespersonId ?? null,
       addonIds: Object.keys(input.addonQuantities),
     });
-    const { data, error } = await supabase.rpc("create_quote", {
+    const { data, error } = await supabase.rpc(input.items ? "create_multi_quote" : "create_quote", {
+      ...(input.items ? { p_items: rpcItems(input.items) } : {
       p_machine_id: input.machineId,
       p_addon_quantities: input.addonQuantities,
+      p_machine_image_url_snapshot: validateMachineImageUrlSnapshot(input.machineImageUrlSnapshot),
+      p_machine_variant_id: input.machineVariantId ?? null,
+      }),
       p_customer_name: requiredText(input.customerName, "El nombre"),
       p_customer_company: optionalText(input.customerCompany) || null,
       p_customer_whatsapp: requiredText(input.customerWhatsapp, "WhatsApp"),
@@ -515,8 +543,6 @@ export async function createQuote(
       p_coupon_code: optionalText(input.couponCode).toUpperCase() || null,
       p_client_generated_id: input.clientGeneratedId ?? null,
       p_client_generated_folio: input.clientGeneratedFolio ?? null,
-      p_machine_image_url_snapshot: validateMachineImageUrlSnapshot(input.machineImageUrlSnapshot),
-      p_machine_variant_id: input.machineVariantId ?? null,
       p_salesperson_id: input.salespersonId ?? null,
     });
 
@@ -545,7 +571,7 @@ export async function createQuote(
     revalidatePath("/seller");
     revalidatePath("/seller/quotes");
     revalidatePath("/admin/quotes");
-    const pdfSnapshot = await loadCreatedQuotePdfSnapshot(supabase, quote.quote_id);
+    const pdfSnapshot = await loadCreatedQuotePdfSnapshot(supabase, quote.quote_id).catch(() => undefined);
 
     return {
       quoteId: quote.quote_id,

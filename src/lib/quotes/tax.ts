@@ -15,9 +15,17 @@ function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+export function grossToNet(gross: number) {
+  return roundMoney(gross / (1 + INCLUDED_IVA_RATE));
+}
+
+export function netDiscount(configurationGross: number, finalGross: number) {
+  return roundMoney(grossToNet(configurationGross) - grossToNet(finalGross));
+}
+
 export function calculateIncludedTaxBreakdown(totalWithTax: number): IncludedTaxBreakdown {
   const total = roundMoney(totalWithTax);
-  const subtotalBeforeTax = roundMoney(total / (1 + INCLUDED_IVA_RATE));
+  const subtotalBeforeTax = grossToNet(total);
   const taxAmount = roundMoney(total - subtotalBeforeTax);
 
   return {

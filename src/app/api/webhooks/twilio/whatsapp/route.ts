@@ -112,6 +112,7 @@ export async function POST(request: Request) {
       sent_at: nextStatus === "SENT" ? message.sent_at ?? occurredAt : message.sent_at,
       delivered_at: nextStatus === "DELIVERED" ? message.delivered_at ?? occurredAt : message.delivered_at,
       read_at: nextStatus === "READ" ? message.read_at ?? occurredAt : message.read_at,
+      failed_at: nextStatus === "FAILED" ? occurredAt : null,
     })
     .eq("id", message.id);
 

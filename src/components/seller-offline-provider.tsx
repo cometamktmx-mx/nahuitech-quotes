@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { prepareQuotePdfGenerator } from "@/lib/pdf/quote-pdf";
 import {
@@ -35,8 +36,8 @@ type SellerOfflineState = {
 };
 
 const SellerOfflineContext = createContext<SellerOfflineState | null>(null);
-const sellerDocumentCache = "nahuitech-seller-documents-v4";
-const staticCache = "nahuitech-static-v4";
+const sellerDocumentCache = "nahuitech-seller-documents-v5";
+const staticCache = "nahuitech-static-v5";
 
 function isConnectivityError(error: unknown) {
   if (error instanceof TypeError) return true;
@@ -97,6 +98,7 @@ export function SellerOfflineProvider({
   children: ReactNode;
   initialAccountRole?: "seller" | "expo";
 }) {
+  const router = useRouter();
   const [isReady, setIsReady] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [sellerId, setSellerId] = useState<string | null>(null);
@@ -263,6 +265,7 @@ export function SellerOfflineProvider({
       await Promise.all([cacheSellerShell(), cacheLoadedAppAssets()]);
       await syncPendingOfflineQuotes(syncedSellerId);
       await refreshOfflineState();
+      router.refresh();
     } catch (error) {
       setSyncError(
         error instanceof Error
@@ -271,7 +274,7 @@ export function SellerOfflineProvider({
       );
       await refreshOfflineState();
     }
-  }, [getBrowserClient, refreshOfflineState]);
+  }, [getBrowserClient, refreshOfflineState, router]);
 
   useEffect(() => {
     const online = typeof navigator === "undefined" ? true : navigator.onLine;

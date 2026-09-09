@@ -8,6 +8,8 @@ import { calculateConfiguration, OfflineQuoteValidationError, validateOfflineCou
 import type { OfflineCustomer, OfflineQuote, SyncQueueEntry } from "./offline-types";
 
 type OfflineQuoteInput = {
+  clientGeneratedId?: string;
+  items?: import("../quotes/items").QuoteItemInput[];
   sellerId: string;
   salespersonId: string | null;
   machineId: string;
@@ -86,10 +88,6 @@ function deliveryNote(type: OfflineQuoteInput["deliveryType"]) {
   return "Por cotizar";
 }
 
-function addonIdsFromQuantities(addonQuantities: Record<string, number>) {
-  return Object.keys(addonQuantities);
-}
-
 function validateDeliveryPolicy(
   machine: { deliveryPolicy: "FLEXIBLE" | "INSTALLATION_REQUIRED" | "SHIPPING_ONLY" },
   deliveryType: OfflineQuoteInput["deliveryType"]
@@ -142,7 +140,7 @@ async function loadOfflineConfiguration(machineId: string, addonQuantities: Reco
   const configuredMachine = variant
     ? { ...machine, basePrice: variant.price ?? machine.basePrice }
     : machine;
-  const addonIds = addonIdsFromQuantities(addonQuantities);
+  const addonIds = relations.filter((relation) => relation.active).map((relation) => relation.addonId);
   const addons = await offlineDb.addons.bulkGet(addonIds);
   const activeAddons = addons.filter((addon): addon is NonNullable<typeof addon> => Boolean(addon?.active));
   const compatibleRelations = new Map(
@@ -158,17 +156,38 @@ async function loadOfflineConfiguration(machineId: string, addonQuantities: Reco
   };
 }
 
+async function loadOfflineItems(input: Pick<OfflineQuoteInput, "items" | "machineId" | "machineVariantId" | "addonQuantities">) {
+  const items = input.items ?? [{ machineId: input.machineId, machineVariantId: input.machineVariantId, addonQuantities: input.addonQuantities, quantity: 1 }];
+  if (!Array.isArray(items) || items.length < 1 || items.length > 100) throw new OfflineQuoteValidationError("Agrega entre 1 y 100 equipos.");
+  return Promise.all(items.map(async (item) => {
+    if (!Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.quantity > 10000) throw new OfflineQuoteValidationError("Cantidad de equipos invÃ¡lida.");
+    const loaded = await loadOfflineConfiguration(item.machineId, item.addonQuantities, item.machineVariantId);
+    const { machine, variant, configuration } = loaded;
+    const deliveryType = machine.deliveryPolicy === "INSTALLATION_REQUIRED" ? "INSTALLATION" : machine.deliveryPolicy === "SHIPPING_ONLY" ? "SHIPPING" : item.deliveryType ?? "LATER";
+    const snapshot: import("../pdf/quote-pdf-types").QuotePdfItem = {
+      machine: { name: machine.name, basePrice: machine.basePrice, numberOfBases: machine.numberOfBases, imageUrl: machine.imageUrl,
+        variant: variant ? { type: variant.variantType, name: variant.displayName, price: variant.price!, description: variant.description } : null },
+      quantity: item.quantity,
+      addons: configuration.quoteAddons.map((addon) => ({ ...addon, quantity: addon.quantity * item.quantity, lineTotal: roundedMoney(addon.lineTotal * item.quantity) })),
+      lineGrossTotal: roundedMoney(configuration.subtotal * item.quantity),
+      delivery: { type: deliveryType, note: deliveryNote(deliveryType) },
+    };
+    return { ...loaded, input: { ...item, machineVariantId: variant?.id ?? null, deliveryType }, snapshot };
+  }));
+}
+
 export async function previewOfflineCoupon({
+  items,
   machineId,
   addonQuantities,
   couponCode,
   machineVariantId,
-}: Pick<OfflineQuoteInput, "machineId" | "addonQuantities" | "couponCode" | "machineVariantId">) {
+}: Pick<OfflineQuoteInput, "machineId" | "addonQuantities" | "couponCode" | "machineVariantId" | "items">) {
   const normalizedCode = couponCode.trim().toUpperCase();
   if (!normalizedCode) throw new OfflineQuoteValidationError("Ingresa un código de cupón.");
 
-  const [{ machine, configuration }, storedCoupon] = await Promise.all([
-    loadOfflineConfiguration(machineId, addonQuantities, machineVariantId),
+  const [loadedItems, storedCoupon] = await Promise.all([
+    loadOfflineItems({ items, machineId, addonQuantities, machineVariantId }),
     offlineDb.coupons.where("code").equals(normalizedCode).first(),
   ]);
 
@@ -180,17 +199,18 @@ export async function previewOfflineCoupon({
     .where("couponId")
     .equals(storedCoupon.id)
     .toArray();
-  const coupon = validateOfflineCoupon(
+  const subtotal = roundedMoney(loadedItems.reduce((sum, item) => sum + item.snapshot.lineGrossTotal, 0));
+  const coupon = loadedItems.map(({ machine }) => validateOfflineCoupon(
     storedCoupon,
     machine.id,
     new Set(couponMachines.map((relation) => relation.machineId)),
-    configuration.subtotal
-  );
+    subtotal
+  ))[0];
 
   return {
-    subtotal: configuration.subtotal,
+    subtotal,
     discountAmount: coupon.discountAmount,
-    total: roundedMoney(configuration.subtotal - coupon.discountAmount),
+    total: roundedMoney(subtotal - coupon.discountAmount),
     couponCode: coupon.code,
     couponName: coupon.name,
     couponDiscountType: coupon.discountType,
@@ -199,9 +219,9 @@ export async function previewOfflineCoupon({
 }
 
 export async function createOfflineQuote(input: OfflineQuoteInput) {
-  const [profile, loadedConfiguration] = await Promise.all([
+  const [profile, loadedItems] = await Promise.all([
     offlineDb.sellerProfiles.get(input.sellerId),
-    loadOfflineConfiguration(input.machineId, input.addonQuantities, input.machineVariantId),
+    loadOfflineItems(input),
   ]);
 
   if (!profile || !profile.active || (profile.role !== "seller" && profile.role !== "expo")) {
@@ -210,8 +230,8 @@ export async function createOfflineQuote(input: OfflineQuoteInput) {
     );
   }
 
-  const { machine, configuration } = loadedConfiguration;
-  const variant = loadedConfiguration.variant;
+  const { machine, variant } = loadedItems[0];
+  const configuration = { subtotal: roundedMoney(loadedItems.reduce((sum, item) => sum + item.snapshot.lineGrossTotal, 0)), quoteAddons: loadedItems.flatMap((item) => item.snapshot.addons) };
   let salespersonId: string | null = null;
   let salespersonName: string;
 
@@ -243,7 +263,7 @@ export async function createOfflineQuote(input: OfflineQuoteInput) {
     // Keep an old individual seller usable until an admin links a salesperson.
     salespersonName = profile.fullName;
   }
-  validateDeliveryPolicy(machine, input.deliveryType);
+  if (!input.items) validateDeliveryPolicy(machine, input.deliveryType);
 
   let coupon = null;
   const couponCode = input.couponCode.trim().toUpperCase();
@@ -258,17 +278,17 @@ export async function createOfflineQuote(input: OfflineQuoteInput) {
       .where("couponId")
       .equals(storedCoupon.id)
       .toArray();
-    coupon = validateOfflineCoupon(
+    coupon = loadedItems.map(({ machine }) => validateOfflineCoupon(
       storedCoupon,
       machine.id,
       new Set(couponMachines.map((relation) => relation.machineId)),
       configuration.subtotal
-    );
+    ))[0];
   }
 
   const createdAt = new Date().toISOString();
   const localId = newUuid();
-  const clientGeneratedId = newUuid();
+  const clientGeneratedId = input.clientGeneratedId ?? newUuid();
   const customer: OfflineCustomer = {
     localId: newUuid(),
     sellerId: input.sellerId,
@@ -281,6 +301,7 @@ export async function createOfflineQuote(input: OfflineQuoteInput) {
   const total = roundedMoney(configuration.subtotal - (coupon?.discountAmount ?? 0));
   const tax = calculateIncludedTaxBreakdown(total);
   const pdfSnapshot: QuotePdfSnapshot = {
+    items: input.items ? loadedItems.map((item) => item.snapshot) : undefined,
     folio: createOfflineFolio(new Date(createdAt)),
     createdAt,
     customer: {
@@ -317,6 +338,7 @@ export async function createOfflineQuote(input: OfflineQuoteInput) {
     notes: null,
   };
   const quote: OfflineQuote = {
+    items: input.items ? loadedItems.map((item) => ({ ...item.input, snapshot: item.snapshot })) : undefined,
     localId,
     clientGeneratedId,
     sellerId: input.sellerId,

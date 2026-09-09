@@ -81,6 +81,7 @@ export type OfflineQuoteSyncStatus = "PENDING" | "SYNCED" | "SYNC_CONFLICT";
 export type OfflineWhatsAppStatus = "NONE" | "PENDING" | "SENT" | "FAILED";
 
 export type OfflineQuote = {
+  items?: (import("../quotes/items").QuoteItemInput & { snapshot: import("../pdf/quote-pdf-types").QuotePdfItem })[];
   localId: string;
   clientGeneratedId: string;
   sellerId: string;

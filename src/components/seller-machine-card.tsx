@@ -1,3 +1,4 @@
+import { grossToNet } from "@/lib/quotes/tax";
 import Link from "next/link";
 
 import type { SellerMachine } from "@/lib/seller-catalog";
@@ -26,7 +27,7 @@ export function SellerMachineCard({
         <div className="mt-auto flex items-end justify-between gap-3 pt-6">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Desde</p>
-            <p className="mt-1 text-2xl font-black tracking-[-0.04em] text-foreground">{currencyFormatter.format(startingPrice ?? machine.basePrice)}</p>
+            <p className="mt-1 text-2xl font-black tracking-[-0.04em] text-foreground">{currencyFormatter.format(grossToNet(startingPrice ?? machine.basePrice))}</p>
           </div>
           <span className="inline-flex min-h-11 items-center rounded-xl bg-primary/10 px-4 text-sm font-bold text-primary-hover">Configurar <span aria-hidden="true" className="ml-2">→</span></span>
         </div>

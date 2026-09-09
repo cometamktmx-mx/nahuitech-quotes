@@ -1,3 +1,4 @@
+import { snapshotItems } from "../quotes/items";
 import {
   quoteCommercialInfo,
   quoteCommercialInfoLabels,
@@ -6,7 +7,8 @@ import type { PDFDocument, PDFFont, PDFImage, PDFPage } from "pdf-lib";
 
 import { hexToRgb, quotePdfBrand } from "./quote-pdf-brand";
 import type { QuotePdfAddon, QuotePdfSnapshot } from "./quote-pdf-types";
-import { calculateIncludedTaxBreakdown } from "../quotes/tax";
+import { calculateIncludedTaxBreakdown, grossToNet, netDiscount } from "../quotes/tax";
+import { cacheMachineImage, loadMachineImageBytes } from "../offline/machine-image-cache";
 
 const logoPath = "/brand/NAHUITECH%20LOGO.png";
 const pageWidth = 595.28;
@@ -71,7 +73,7 @@ function wrapText(text: string, font: PDFFont, size: number, maxWidth: number) {
 }
 
 async function loadCroppedLogo(): Promise<Uint8Array> {
-  const response = await fetch(logoPath);
+  const response = await cacheMachineImage(logoPath);
   if (!response.ok) throw new Error("No se pudo cargar el logotipo de Nahuitech.");
 
   const source = URL.createObjectURL(await response.blob());
@@ -153,20 +155,6 @@ async function loadCroppedLogo(): Promise<Uint8Array> {
   }
 }
 
-async function loadLocalMachineImage(imageUrl: string | null): Promise<Uint8Array | undefined> {
-  if (!imageUrl?.startsWith("/machines/")) return undefined;
-
-  try {
-    const response = await fetch(imageUrl);
-    if (!response.ok) return undefined;
-    return new Uint8Array(await response.arrayBuffer());
-  } catch {
-    // A locally cached asset may be unavailable on a first offline launch. The
-    // quotation must remain usable without reserving an empty image area.
-    return undefined;
-  }
-}
-
 async function embedMachineImage(
   document: PDFDocument,
   imageBytes: Uint8Array | undefined
@@ -209,7 +197,7 @@ function couponLabel(snapshot: QuotePdfSnapshot) {
   if (!snapshot.coupon) return "";
   return snapshot.coupon.discountType === "PERCENTAGE"
     ? `${snapshot.coupon.discountValue}% de descuento`
-    : `${asMoney(snapshot.coupon.discountValue)} de descuento`;
+    : `${asMoney(netDiscount(snapshot.subtotal, snapshot.total))} de descuento`;
 }
 
 function addHeader(context: DrawingContext, snapshot: QuotePdfSnapshot, compact = false) {
@@ -506,7 +494,7 @@ function drawMachine(context: DrawingContext, snapshot: QuotePdfSnapshot) {
     });
     nameY -= 8.5;
   }
-  const price = asMoney(snapshot.machine.basePrice);
+  const price = asMoney(grossToNet(snapshot.machine.basePrice));
   context.page.drawText(price, {
     x: pageWidth - margin - 12 - context.bold.widthOfTextAtSize(price, 12),
     y: boxBottom + 16,
@@ -561,7 +549,7 @@ function drawAddons(context: DrawingContext, snapshot: QuotePdfSnapshot) {
       const quantityLabel = addon.calculationType === "PER_BASE"
         ? `${addon.quantity} bases`
         : `${addon.quantity} ${addon.quantity === 1 ? "unidad" : "unidades"}`;
-      context.page.drawText(`${quantityLabel} × ${asMoney(addon.unitPrice)}`, {
+      context.page.drawText(`${quantityLabel} × ${asMoney(grossToNet(addon.unitPrice))}`, {
         x: margin,
         y: lineY - 1,
         size: 8.5,
@@ -570,7 +558,7 @@ function drawAddons(context: DrawingContext, snapshot: QuotePdfSnapshot) {
       });
       lineY -= 12;
     }
-    const total = asMoney(addon.lineTotal);
+    const total = asMoney(grossToNet(addon.lineTotal));
     context.page.drawText(total, {
       x: pageWidth - margin - context.bold.widthOfTextAtSize(total, 10),
       y: context.cursorY,
@@ -629,7 +617,7 @@ function drawCoupon(context: DrawingContext, snapshot: QuotePdfSnapshot) {
     font: context.regular,
     color: rgbFromHex(context.pdf, quotePdfBrand.graphite),
   });
-  const benefit = `- ${asMoney(snapshot.discountAmount)}`;
+  const benefit = `- ${asMoney(netDiscount(snapshot.subtotal, snapshot.total))}`;
   context.page.drawText(benefit, {
     x: pageWidth - margin - 14 - context.bold.widthOfTextAtSize(benefit, 12),
     y: context.cursorY - 29,
@@ -685,10 +673,10 @@ function drawFinancialSummary(context: DrawingContext, snapshot: QuotePdfSnapsho
   };
 
   if (hasCoupon) {
-    drawRow("Precio configuración", asMoney(snapshot.subtotal));
-    drawRow("Beneficio Expo", `- ${asMoney(snapshot.discountAmount)}`);
+    drawRow("Precio configuración", asMoney(grossToNet(snapshot.subtotal)));
+    drawRow("Beneficio Expo", `- ${asMoney(netDiscount(snapshot.subtotal, snapshot.total))}`);
   }
-  drawRow("Subtotal sin IVA", asMoney(tax.subtotalBeforeTax));
+  drawRow("Subtotal", asMoney(tax.subtotalBeforeTax));
   drawRow(`IVA ${Math.round(tax.taxRate * 100)}%`, asMoney(tax.taxAmount));
   drawRow(hasCoupon ? "PRECIO FINAL" : "TOTAL", asMoney(snapshot.total), true);
   context.cursorY = boxBottom - 9;
@@ -742,7 +730,7 @@ export async function prepareQuotePdfGenerator() {
 
 export async function generateQuotePdf(
   snapshot: QuotePdfSnapshot,
-  options: { logoBytes?: Uint8Array; machineImageBytes?: Uint8Array } = {}
+  options: { logoBytes?: Uint8Array; machineImageBytes?: Uint8Array; itemImageBytes?: (Uint8Array | undefined)[] } = {}
 ) {
   if (typeof window === "undefined" && !options.logoBytes) {
     throw new Error("La generación PDF solo está disponible en el navegador.");
@@ -756,7 +744,7 @@ export async function generateQuotePdf(
   ]);
   const logoBytes = options.logoBytes ?? await loadCroppedLogo();
   const logo = await document.embedPng(logoBytes);
-  const machineImageBytes = options.machineImageBytes ?? await loadLocalMachineImage(snapshot.machine.imageUrl);
+  const machineImageBytes = options.machineImageBytes ?? await loadMachineImageBytes(snapshot.machine.imageUrl);
   const machineImage = await embedMachineImage(document, machineImageBytes);
   const firstPage = document.addPage([pageWidth, pageHeight]);
   const context: DrawingContext = {
@@ -772,8 +760,16 @@ export async function generateQuotePdf(
 
   addHeader(context, snapshot);
   drawClientAndAdvisor(context, snapshot);
-  drawMachine(context, snapshot);
-  drawAddons(context, snapshot);
+  for (const [index, item] of snapshotItems(snapshot).entries()) {
+    const bytes = options.itemImageBytes?.[index] ?? (index === 0 && options.machineImageBytes ? options.machineImageBytes : await loadMachineImageBytes(item.machine.imageUrl));
+    context.machineImage = await embedMachineImage(document, bytes);
+    const itemSnapshot = { ...snapshot, machine: { ...item.machine, name: `${index + 1}. ${item.machine.name}`, basePrice: Math.round(item.machine.basePrice * item.quantity * 100) / 100 }, addons: item.addons };
+    drawMachine(context, itemSnapshot);
+    drawTextBlock(context, snapshot, `Cantidad: ${item.quantity} | Precio unitario: ${asMoney(grossToNet(item.machine.basePrice))}`, { size: 8, gapAfter: 8 });
+    drawAddons(context, itemSnapshot);
+    drawTextBlock(context, snapshot, `Importe equipo: ${asMoney(grossToNet(item.lineGrossTotal))}`, { size: 9, gapAfter: 8 });
+    if (snapshot.items?.length) drawTextBlock(context, snapshot, `Entrega: ${item.delivery.type === "INSTALLATION" ? "Instalación" : item.delivery.type === "SHIPPING" ? "Envío" : "Por definir"} - ${item.delivery.note ?? "Por cotizar"}`, { size: 8, gapAfter: 10 });
+  }
   drawDelivery(context, snapshot);
   drawPromotionAndFinancialSummary(context, snapshot);
   drawCommercialInfo(context, snapshot);

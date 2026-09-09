@@ -1,3 +1,4 @@
+import { loadQuoteItems } from "@/lib/quotes/load-items";
 import { notFound } from "next/navigation";
 
 import { AdminNav } from "@/components/admin-nav";
@@ -67,10 +68,12 @@ export default async function AdminQuoteDetailPage({
     notFound();
   }
 
+  const items = await loadQuoteItems(supabase, quoteId);
+
   return (
     <div className="min-h-screen bg-background">
       <AdminNav active="quotes" userName={profile.full_name} />
-      <QuoteDetailCard
+      <QuoteDetailCard items={items}
         addons={(addonsResult.data ?? []).map((addon) => ({
           id: addon.id,
           addonName: addon.addon_name_snapshot,

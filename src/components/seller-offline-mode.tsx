@@ -1,5 +1,7 @@
 "use client";
 
+import { grossToNet } from "@/lib/quotes/tax";
+
 import { useCallback, useEffect, useState } from "react";
 
 import { getOfflineCatalog } from "@/lib/offline/offline-catalog";
@@ -269,7 +271,7 @@ export function SellerOfflineMode() {
                   {machine.shortDescription}
                 </span>
                 <span className="mt-auto pt-6 text-2xl font-black tracking-[-0.04em] text-foreground">
-                  {currencyFormatter.format(startingPrice)}
+                  {currencyFormatter.format(grossToNet(startingPrice))}
                 </span>
               </span>
             </button>;

@@ -17,6 +17,7 @@ export type QuotePdfCoupon = {
 };
 
 export type QuotePdfSnapshot = {
+  items?: QuotePdfItem[];
   folio: string;
   createdAt: string;
   customer: {
@@ -54,4 +55,13 @@ export type QuotePdfSnapshot = {
     note: string | null;
   };
   notes: string | null;
+};
+
+export type QuotePdfItem = {
+  id?: string;
+  machine: QuotePdfSnapshot["machine"];
+  quantity: number;
+  addons: QuotePdfAddon[];
+  lineGrossTotal: number;
+  delivery: QuotePdfSnapshot["delivery"];
 };

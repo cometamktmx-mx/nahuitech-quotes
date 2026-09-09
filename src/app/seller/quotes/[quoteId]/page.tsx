@@ -1,3 +1,4 @@
+import { loadQuoteItems } from "@/lib/quotes/load-items";
 import { notFound } from "next/navigation";
 
 import { QuoteDetailCard } from "@/components/quote-detail-card";
@@ -73,11 +74,13 @@ export default async function SellerQuoteDetailPage({
     notFound();
   }
 
+  const items = await loadQuoteItems(supabase, quoteId);
+
   return (
     <SellerOfflineProvider initialAccountRole={profile.role}>
       <div className="min-h-screen bg-background">
         <SellerShellHeader accountRole={profile.role} userName={profile.full_name} />
-        <QuoteDetailCard
+        <QuoteDetailCard items={items}
         addons={(addonRows ?? []).map((addon) => ({
           id: addon.id,
           addonName: addon.addon_name_snapshot,

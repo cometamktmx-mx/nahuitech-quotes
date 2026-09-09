@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { generateQuotePdfOnServer } from "@/lib/pdf/quote-pdf-server";
+import { loadQuoteItems } from "@/lib/quotes/load-items";
 import type { QuotePdfSnapshot } from "@/lib/pdf/quote-pdf-types";
 import { calculateIncludedTaxBreakdown } from "@/lib/quotes/tax";
 import {
@@ -71,7 +72,7 @@ function publicSendError(error: unknown) {
   }
 
   if (error instanceof TwilioConfigurationError) {
-    return { code: "CONFIGURATION", message: "El envío por WhatsApp está pendiente de configuración.", retryable: false };
+    return { code: "CONFIGURATION", message: error.message, retryable: false };
   }
 
   const message = safeErrorMessage(error).toLowerCase();
@@ -188,6 +189,7 @@ async function loadQuoteSnapshot(quoteId: string): Promise<QuotePdfSnapshot> {
   const historicTax = calculateIncludedTaxBreakdown(asNumber(quote.total));
 
   return {
+    items: await loadQuoteItems(supabase, quoteId),
     folio: quote.folio,
     createdAt: quote.created_at,
     customer: customerResult.data,
@@ -321,6 +323,7 @@ export async function sendQuoteViaWhatsApp(
           customer_whatsapp_snapshot: destination.e164,
           error_code: null,
           error_message: null,
+          failed_at: null,
         })
         .eq("id", existing.id);
 
@@ -351,6 +354,13 @@ export async function sendQuoteViaWhatsApp(
       authorizedQuote.folio,
       snapshot
     );
+    console.info("[twilio whatsapp send]", {
+      quoteId: authorizedQuote.id,
+      folio: authorizedQuote.folio,
+      toMasked: `${destination.e164.slice(0, 5)}••••${destination.e164.slice(-2)}`,
+      contentConfigured: true,
+      pdfUploadStatus: "ready",
+    });
     const sent = await sendQuoteWhatsAppWithTwilio({
       customerName: snapshot.customer.name,
       customerWhatsApp: snapshot.customer.whatsapp,
@@ -369,6 +379,7 @@ export async function sendQuoteViaWhatsApp(
         customer_whatsapp_snapshot: sent.destination,
         error_code: null,
         error_message: null,
+        failed_at: null,
         sent_at: new Date().toISOString(),
       })
       .eq("quote_id", authorizedQuote.id);
@@ -382,6 +393,12 @@ export async function sendQuoteViaWhatsApp(
     return { status: "SENT", destination: sent.destination };
   } catch (error) {
     const normalized = publicSendError(error);
+    console.error("[twilio whatsapp error]", {
+      quoteId: authorizedQuote?.id ?? null,
+      code: normalized.code,
+      message: normalized.message,
+      status: normalized.retryable ? "retryable" : "failed",
+    });
 
     if (authorizedQuote && hasSupabaseAdminConfiguration()) {
       const admin = createSupabaseAdminClient();
@@ -391,6 +408,7 @@ export async function sendQuoteViaWhatsApp(
           status: "FAILED",
           error_code: normalized.code,
           error_message: normalized.message,
+          failed_at: new Date().toISOString(),
         })
         .eq("quote_id", authorizedQuote.id)
         .eq("status", "SENDING");

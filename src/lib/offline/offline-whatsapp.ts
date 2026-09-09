@@ -116,7 +116,7 @@ export async function syncPendingOfflineWhatsAppTasks(sellerId: string) {
         continue;
       }
 
-      if (result.retryable || result.configurationRequired) {
+      if (result.retryable) {
         await offlineDb.offlineWhatsAppTasks.update(task.localId, {
           attempts: task.attempts + 1,
           lastAttemptAt: now,

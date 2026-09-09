@@ -22,7 +22,7 @@ import {
   TwilioConfigurationError,
 } from "@/lib/whatsapp/twilio.server";
 
-type WhatsAppMessageStatus = "PENDING" | "SENDING" | "SENT" | "DELIVERED" | "READ" | "FAILED";
+type WhatsAppMessageStatus = "PENDING" | "WAITING_FOR_CUSTOMER" | "SENDING" | "SENT" | "DELIVERED" | "READ" | "FAILED";
 
 export type SendQuoteViaWhatsAppResult = {
   error?: string;
@@ -33,6 +33,7 @@ export type SendQuoteViaWhatsAppResult = {
   mode?: "template" | "customer_initiated";
   waLink?: string;
   token?: string;
+  message?: string;
 };
 
 type AuthorizedQuote = {
@@ -266,6 +267,7 @@ export async function sendQuoteViaWhatsApp(
   quoteId: string
 ): Promise<SendQuoteViaWhatsAppResult> {
   let authorizedQuote: AuthorizedQuote | null = null;
+  let deliveryMode: string | null = null;
 
   try {
     authorizedQuote = await getAuthorizedQuote(quoteId);
@@ -279,11 +281,13 @@ export async function sendQuoteViaWhatsApp(
 
     const snapshot = await loadQuoteSnapshot(authorizedQuote.id);
     const mode = getWhatsAppDeliveryMode();
+    deliveryMode = mode;
     if (mode === "customer_initiated") {
       const token = await getOrCreateDeliveryToken(authorizedQuote.id);
       const message = `Quiero recibir mi cotizaciÃ³n ${authorizedQuote.folio} ${token.token}`;
       const waLink = `https://wa.me/${getWhatsAppSenderDigits()}?text=${encodeURIComponent(message)}`;
-      return { mode, token: token.token, waLink, status: "PENDING", destination: normalizeWhatsAppPhone(snapshot.customer.whatsapp).e164 };
+      console.log("[customer initiated setup]", { quoteId: authorizedQuote.id, deliveryMode, hasRemoteQuote: true, tokenCreated: true, waLinkCreated: true, qrCreated: false });
+      return { mode, token: token.token, waLink, status: "WAITING_FOR_CUSTOMER", destination: normalizeWhatsAppPhone(snapshot.customer.whatsapp).e164, message: "Esperando mensaje del cliente..." };
     }
     // Validate all server-only Twilio settings before creating storage objects or a send record.
     getTwilioWhatsAppConfiguration({ requireContentSid: true });
@@ -394,6 +398,7 @@ export async function sendQuoteViaWhatsApp(
       message: normalized.message,
       status: normalized.retryable ? "retryable" : "failed",
     });
+    if (deliveryMode === "customer_initiated" || !deliveryMode) console.error("[customer initiated setup error]", { code: normalized.code, message: normalized.message, details: error instanceof Error ? error.message.slice(0, 700) : "unknown", hint: "Verifica quote_delivery_tokens y su migración." });
 
     if (authorizedQuote && hasSupabaseAdminConfiguration()) {
       const admin = createSupabaseAdminClient();

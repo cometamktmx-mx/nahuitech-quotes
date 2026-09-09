@@ -3,9 +3,9 @@ import { useEffect, useState, useTransition } from "react";
 import QRCode from "qrcode";
 import { getWhatsAppDeliveryState, sendQuoteViaWhatsApp } from "@/app/quotes/whatsapp-actions";
 import { primaryButtonClass } from "./ui";
-type Status="PENDING"|"SENDING"|"SENT"|"DELIVERED"|"READ"|"FAILED";
-const labels:Record<Status,string>={PENDING:"Pendiente",SENDING:"Enviando",SENT:"Enviado",DELIVERED:"Entregado",READ:"Leído",FAILED:"Error"};
-const classes:Record<Status,string>={PENDING:"bg-warning/10 text-warning",SENDING:"bg-primary/10 text-primary-hover",SENT:"bg-success/10 text-success",DELIVERED:"bg-success/10 text-success",READ:"bg-success/10 text-success",FAILED:"bg-danger/10 text-danger"};
+type Status="PENDING"|"WAITING_FOR_CUSTOMER"|"SENDING"|"SENT"|"DELIVERED"|"READ"|"FAILED";
+const labels:Record<Status,string>={PENDING:"Pendiente",WAITING_FOR_CUSTOMER:"Esperando al cliente",SENDING:"Enviando",SENT:"Enviado",DELIVERED:"Entregado",READ:"Leído",FAILED:"Error"};
+const classes:Record<Status,string>={PENDING:"bg-warning/10 text-warning",WAITING_FOR_CUSTOMER:"bg-warning/10 text-warning",SENDING:"bg-primary/10 text-primary-hover",SENT:"bg-success/10 text-success",DELIVERED:"bg-success/10 text-success",READ:"bg-success/10 text-success",FAILED:"bg-danger/10 text-danger"};
 function terminal(s:Status|null){return s==="SENT"||s==="DELIVERED"||s==="READ";}
 export function QuoteWhatsAppButton({quoteId,initialStatus=null,initialDestination=null,initialError=null}:{quoteId:string;initialStatus?:Status|null;initialDestination?:string|null;initialError?:string|null}){
  const [pending,start]=useTransition(); const [status,setStatus]=useState<Status|null>(initialStatus); const [destination,setDestination]=useState(initialDestination); const [message,setMessage]=useState(initialError); const [link,setLink]=useState<string|null>(null); const [qr,setQr]=useState<string|null>(null);

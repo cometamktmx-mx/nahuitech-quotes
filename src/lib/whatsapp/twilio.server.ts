@@ -30,11 +30,11 @@ function mediaVariableValue(mediaUrl: string) {
   let parsed: URL;
   try { parsed = new URL(mediaUrl); } catch { throw new TwilioConfigurationError("El enlace temporal del PDF no es válido."); }
   if (parsed.protocol !== "https:") throw new TwilioConfigurationError("El enlace temporal del PDF debe usar HTTPS.");
-  const marker = "/storage/v1/object/sign/quote-pdfs/";
+  const marker = "/api/whatsapp-media/";
   const index = parsed.pathname.indexOf(marker);
   const path = index < 0 ? "" : parsed.pathname.slice(index + marker.length);
-  if (!path.endsWith(".pdf") || !parsed.search) throw new TwilioConfigurationError("El enlace temporal del PDF no tiene el formato esperado.");
-  return `${path}${parsed.search}`;
+  if (!path || path.includes("/") || parsed.search) throw new TwilioConfigurationError("El enlace temporal del PDF no tiene el formato esperado.");
+  return path;
 }
 export async function sendQuoteWhatsAppWithTwilio(input: SendQuoteWhatsAppInput) {
   const configuration = getTwilioWhatsAppConfiguration();

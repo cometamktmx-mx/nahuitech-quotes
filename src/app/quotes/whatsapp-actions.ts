@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { generateQuotePdfOnServer } from "@/lib/pdf/quote-pdf-server";
+import { createWhatsAppMediaToken } from "@/lib/whatsapp/media-token.server";
 import { loadQuoteItems } from "@/lib/quotes/load-items";
 import type { QuotePdfSnapshot } from "@/lib/pdf/quote-pdf-types";
 import { calculateIncludedTaxBreakdown } from "@/lib/quotes/tax";
@@ -39,7 +40,7 @@ type AuthorizedQuote = {
 const quoteIdPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const pdfBucket = "quote-pdfs";
-const signedUrlLifetimeSeconds = 60 * 60 * 24;
+const mediaRoutePath = "/api/whatsapp-media/";
 
 function asNumber(value: unknown) {
   const number = Number(value);
@@ -242,15 +243,10 @@ async function loadQuoteSnapshot(quoteId: string): Promise<QuotePdfSnapshot> {
   };
 }
 
-async function getOrCreateSignedPdfUrl(quoteId: string, folio: string, snapshot: QuotePdfSnapshot) {
+async function getOrCreateWhatsAppMediaUrl(quoteId: string, folio: string, snapshot: QuotePdfSnapshot) {
   const supabase = createSupabaseAdminClient();
   const objectPath = `quotes/${quoteId}/${folio}.pdf`;
   const storage = supabase.storage.from(pdfBucket);
-
-  const existing = await storage.createSignedUrl(objectPath, signedUrlLifetimeSeconds);
-  if (existing.data?.signedUrl && !existing.error) {
-    return existing.data.signedUrl;
-  }
 
   const pdfBytes = await generateQuotePdfOnServer(snapshot);
   const upload = await storage.upload(objectPath, pdfBytes, {
@@ -263,12 +259,10 @@ async function getOrCreateSignedPdfUrl(quoteId: string, folio: string, snapshot:
     throw new Error("No se pudo guardar el PDF de la cotización.");
   }
 
-  const signed = await storage.createSignedUrl(objectPath, signedUrlLifetimeSeconds);
-  if (signed.error || !signed.data?.signedUrl) {
-    throw new Error("No se pudo crear un enlace temporal para el PDF.");
-  }
-
-  return signed.data.signedUrl;
+  const appUrl = process.env.APP_URL?.trim();
+  if (!appUrl || !/^https:\/\//i.test(appUrl)) throw new Error("Falta configurar APP_URL para servir el PDF de WhatsApp.");
+  const mediaToken = createWhatsAppMediaToken(`${pdfBucket}/${objectPath}`);
+  return `${appUrl.replace(/\/$/, "")}${mediaRoutePath}${mediaToken}`;
 }
 
 export async function sendQuoteViaWhatsApp(
@@ -349,7 +343,7 @@ export async function sendQuoteViaWhatsApp(
       }
     }
 
-    const signedPdfUrl = await getOrCreateSignedPdfUrl(
+    const mediaUrl = await getOrCreateWhatsAppMediaUrl(
       authorizedQuote.id,
       authorizedQuote.folio,
       snapshot
@@ -368,7 +362,7 @@ export async function sendQuoteViaWhatsApp(
       machineName: snapshot.machine.name,
       total: asMoney(snapshot.total),
       sellerName: snapshot.sellerName,
-      mediaUrl: signedPdfUrl,
+      mediaUrl,
     });
 
     const { error: updateError } = await admin

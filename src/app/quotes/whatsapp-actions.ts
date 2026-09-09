@@ -284,7 +284,7 @@ export async function sendQuoteViaWhatsApp(
     deliveryMode = mode;
     if (mode === "customer_initiated") {
       const token = await getOrCreateDeliveryToken(authorizedQuote.id);
-      const message = `Quiero recibir mi cotizaciÃ³n ${authorizedQuote.folio} ${token.token}`;
+      const message = `Quiero recibir mi cotización ${authorizedQuote.folio} ${token.token}`;
       const waLink = `https://wa.me/${getWhatsAppSenderDigits()}?text=${encodeURIComponent(message)}`;
       console.log("[customer initiated setup]", { quoteId: authorizedQuote.id, deliveryMode, hasRemoteQuote: true, tokenCreated: true, waLinkCreated: true, qrCreated: false });
       return { mode, token: token.token, waLink, status: "WAITING_FOR_CUSTOMER", destination: normalizeWhatsAppPhone(snapshot.customer.whatsapp).e164, message: "Esperando mensaje del cliente..." };

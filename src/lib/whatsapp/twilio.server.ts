@@ -1,48 +1,17 @@
-import "server-only";
+﻿import "server-only";
 import twilio from "twilio";
 import { normalizeWhatsAppPhone } from "./phone";
-
 export class TwilioConfigurationError extends Error {}
-type TwilioWhatsAppConfiguration = { accountSid: string; authToken: string; from: string; contentSid: string; statusCallbackUrl: string };
-type SendQuoteWhatsAppInput = { customerName: string; customerWhatsApp: string; folio: string; machineName: string; total: string; sellerName: string | null; mediaUrl: string };
-
-function requiredEnvironmentValue(name: string) {
-  const value = process.env[name]?.trim();
-  if (!value) throw new TwilioConfigurationError(`Falta configurar ${name}.`);
-  return value;
-}
-function appUrl() {
-  const value = process.env.APP_URL?.trim() || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
-  if (!value) throw new TwilioConfigurationError("Falta configurar APP_URL para recibir estados de WhatsApp.");
-  let parsed: URL;
-  try { parsed = new URL(value); } catch { throw new TwilioConfigurationError("APP_URL debe ser una URL pública HTTPS válida."); }
-  if (parsed.protocol !== "https:") throw new TwilioConfigurationError("APP_URL debe usar HTTPS para los callbacks de Twilio.");
-  return parsed.toString().replace(/\/$/, "");
-}
-function normalizedFrom(value: string) { return normalizeWhatsAppPhone(value.replace(/^whatsapp:/i, "")).whatsappAddress; }
-export function getTwilioStatusCallbackUrl() { return `${appUrl()}/api/webhooks/twilio/whatsapp`; }
-export function getTwilioWhatsAppConfiguration(): TwilioWhatsAppConfiguration {
-  const contentSid = requiredEnvironmentValue("TWILIO_CONTENT_SID");
-  if (!/^HX[a-f0-9]{32}$/i.test(contentSid)) throw new TwilioConfigurationError("TWILIO_CONTENT_SID no tiene un formato de Content Template válido.");
-  return { accountSid: requiredEnvironmentValue("TWILIO_ACCOUNT_SID"), authToken: requiredEnvironmentValue("TWILIO_AUTH_TOKEN"), from: normalizedFrom(requiredEnvironmentValue("TWILIO_WHATSAPP_FROM")), contentSid, statusCallbackUrl: getTwilioStatusCallbackUrl() };
-}
-function mediaVariableValue(mediaUrl: string) {
-  let parsed: URL;
-  try { parsed = new URL(mediaUrl); } catch { throw new TwilioConfigurationError("El enlace temporal del PDF no es válido."); }
-  if (parsed.protocol !== "https:") throw new TwilioConfigurationError("El enlace temporal del PDF debe usar HTTPS.");
-  const marker = "/api/whatsapp-media/";
-  const index = parsed.pathname.indexOf(marker);
-  const path = index < 0 ? "" : parsed.pathname.slice(index + marker.length);
-  if (!path || path.includes("/") || parsed.search) throw new TwilioConfigurationError("El enlace temporal del PDF no tiene el formato esperado.");
-  return path;
-}
-export async function sendQuoteWhatsAppWithTwilio(input: SendQuoteWhatsAppInput) {
-  const configuration = getTwilioWhatsAppConfiguration();
-  const destination = normalizeWhatsAppPhone(input.customerWhatsApp);
-  const message = await twilio(configuration.accountSid, configuration.authToken).messages.create({
-    to: destination.whatsappAddress, from: configuration.from, statusCallback: configuration.statusCallbackUrl,
-    contentSid: configuration.contentSid,
-    contentVariables: JSON.stringify({ 1: input.customerName.replace(/[\r\n]/g, " ").trim(), 2: mediaVariableValue(input.mediaUrl) }),
-  });
-  return { destination: destination.e164, providerMessageId: message.sid };
-}
+export type WhatsAppDeliveryMode = "template" | "customer_initiated";
+type TwilioWhatsAppConfiguration = { accountSid:string; authToken:string; from:string; contentSid:string|null; statusCallbackUrl:string };
+function requiredEnvironmentValue(name:string){const value=process.env[name]?.trim();if(!value)throw new TwilioConfigurationError(`Falta configurar ${name}.`);return value;}
+function appUrl(){const value=process.env.APP_URL?.trim()||(process.env.VERCEL_URL?`https://${process.env.VERCEL_URL}`:"");if(!value)throw new TwilioConfigurationError("Falta configurar APP_URL para recibir estados de WhatsApp.");let parsed:URL;try{parsed=new URL(value);}catch{throw new TwilioConfigurationError("APP_URL debe ser una URL pÃºblica HTTPS vÃ¡lida.");}if(parsed.protocol!=="https:")throw new TwilioConfigurationError("APP_URL debe usar HTTPS para callbacks de Twilio.");return parsed.toString().replace(/\/$/,"");}
+function normalizedFrom(value:string){return normalizeWhatsAppPhone(value.replace(/^whatsapp:/i,"")).whatsappAddress;}
+export function getTwilioStatusCallbackUrl(){return `${appUrl()}/api/webhooks/twilio/whatsapp`;}
+export function getTwilioInboundWebhookUrl(){return `${appUrl()}/api/webhooks/twilio/whatsapp/inbound`;}
+export function getWhatsAppDeliveryMode():WhatsAppDeliveryMode{const configured=process.env.WHATSAPP_DELIVERY_MODE?.trim().toLowerCase()||"auto";if(!["template","customer_initiated","auto"].includes(configured))throw new TwilioConfigurationError("WHATSAPP_DELIVERY_MODE debe ser template, customer_initiated o auto.");const sid=process.env.TWILIO_CONTENT_SID?.trim()||"";const valid=/^HX[a-f0-9]{32}$/i.test(sid);if(configured==="template"&&!valid)throw new TwilioConfigurationError("El modo template requiere un TWILIO_CONTENT_SID vÃ¡lido.");return configured==="customer_initiated"||(configured==="auto"&&!valid)?"customer_initiated":"template";}
+export function getTwilioWhatsAppConfiguration(options:{requireContentSid?:boolean}={}):TwilioWhatsAppConfiguration{const sid=process.env.TWILIO_CONTENT_SID?.trim()||"";const contentSid=/^HX[a-f0-9]{32}$/i.test(sid)?sid:null;if(options.requireContentSid&&!contentSid)throw new TwilioConfigurationError("El modo template requiere un TWILIO_CONTENT_SID vÃ¡lido.");return{accountSid:requiredEnvironmentValue("TWILIO_ACCOUNT_SID"),authToken:requiredEnvironmentValue("TWILIO_AUTH_TOKEN"),from:normalizedFrom(requiredEnvironmentValue("TWILIO_WHATSAPP_FROM")),contentSid,statusCallbackUrl:getTwilioStatusCallbackUrl()};}
+function mediaVariableValue(mediaUrl:string){let parsed:URL;try{parsed=new URL(mediaUrl);}catch{throw new TwilioConfigurationError("El enlace temporal del PDF no es vÃ¡lido.");}if(parsed.protocol!=="https:")throw new TwilioConfigurationError("El enlace temporal del PDF debe usar HTTPS.");const marker="/api/whatsapp-media/";const index=parsed.pathname.indexOf(marker);const path=index<0?"":parsed.pathname.slice(index+marker.length);if(!path||path.includes("/")||parsed.search)throw new TwilioConfigurationError("El enlace temporal del PDF no tiene el formato esperado.");return path;}
+export async function sendQuoteWhatsAppWithTwilio(input:{customerName:string;customerWhatsApp:string;mediaUrl:string}){const c=getTwilioWhatsAppConfiguration({requireContentSid:true});const d=normalizeWhatsAppPhone(input.customerWhatsApp);const m=await twilio(c.accountSid,c.authToken).messages.create({to:d.whatsappAddress,from:c.from,statusCallback:c.statusCallbackUrl,contentSid:c.contentSid!,contentVariables:JSON.stringify({1:input.customerName.replace(/[\r\n]/g," ").trim(),2:mediaVariableValue(input.mediaUrl)})});return{destination:d.e164,providerMessageId:m.sid};}
+export async function sendCustomerInitiatedWhatsAppWithTwilio(input:{customerName:string;customerWhatsApp:string;mediaUrl:string}){const c=getTwilioWhatsAppConfiguration();const d=normalizeWhatsAppPhone(input.customerWhatsApp);const m=await twilio(c.accountSid,c.authToken).messages.create({to:d.whatsappAddress,from:c.from,body:`Hola ${input.customerName.replace(/[\r\n]/g," ").trim()}, aquÃ­ tienes tu cotizaciÃ³n de Nahuitech. Si necesitas algÃºn ajuste, con gusto podemos ayudarte.`,mediaUrl:[input.mediaUrl],statusCallback:c.statusCallbackUrl});return{destination:d.e164,providerMessageId:m.sid};}
+export function getWhatsAppSenderDigits(){return getTwilioWhatsAppConfiguration().from.replace(/^whatsapp:\+/,"").replace(/\D/g,"");}

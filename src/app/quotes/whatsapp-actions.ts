@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { generateQuotePdfOnServer } from "@/lib/pdf/quote-pdf-server";
 import { createWhatsAppMediaToken } from "@/lib/whatsapp/media-token.server";
+import { getOrCreateDeliveryToken } from "@/lib/whatsapp/delivery-token.server";
 import { loadQuoteItems } from "@/lib/quotes/load-items";
 import type { QuotePdfSnapshot } from "@/lib/pdf/quote-pdf-types";
 import { calculateIncludedTaxBreakdown } from "@/lib/quotes/tax";
@@ -15,6 +16,8 @@ import { createClient } from "@/lib/supabase/server";
 import { normalizeWhatsAppPhone, WhatsAppPhoneValidationError } from "@/lib/whatsapp/phone";
 import {
   getTwilioWhatsAppConfiguration,
+  getWhatsAppDeliveryMode,
+  getWhatsAppSenderDigits,
   sendQuoteWhatsAppWithTwilio,
   TwilioConfigurationError,
 } from "@/lib/whatsapp/twilio.server";
@@ -27,6 +30,9 @@ export type SendQuoteViaWhatsAppResult = {
   configurationRequired?: boolean;
   status?: WhatsAppMessageStatus;
   destination?: string;
+  mode?: "template" | "customer_initiated";
+  waLink?: string;
+  token?: string;
 };
 
 type AuthorizedQuote = {
@@ -45,15 +51,6 @@ const mediaRoutePath = "/api/whatsapp-media/";
 function asNumber(value: unknown) {
   const number = Number(value);
   return Number.isFinite(number) ? number : 0;
-}
-
-function asMoney(value: number) {
-  return `${new Intl.NumberFormat("es-MX", {
-    style: "currency",
-    currency: "MXN",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value)} MXN`;
 }
 
 function isTerminalStatus(status: WhatsAppMessageStatus) {
@@ -153,7 +150,7 @@ async function getAuthorizedQuote(quoteId: string): Promise<AuthorizedQuote> {
   };
 }
 
-async function loadQuoteSnapshot(quoteId: string): Promise<QuotePdfSnapshot> {
+export async function loadQuoteSnapshot(quoteId: string): Promise<QuotePdfSnapshot> {
   const supabase = createSupabaseAdminClient();
   const { data: quote, error: quoteError } = await supabase
     .from("quotes")
@@ -243,7 +240,7 @@ async function loadQuoteSnapshot(quoteId: string): Promise<QuotePdfSnapshot> {
   };
 }
 
-async function getOrCreateWhatsAppMediaUrl(quoteId: string, folio: string, snapshot: QuotePdfSnapshot) {
+export async function getOrCreateWhatsAppMediaUrl(quoteId: string, folio: string, snapshot: QuotePdfSnapshot) {
   const supabase = createSupabaseAdminClient();
   const objectPath = `quotes/${quoteId}/${folio}.pdf`;
   const storage = supabase.storage.from(pdfBucket);
@@ -280,10 +277,17 @@ export async function sendQuoteViaWhatsApp(
       };
     }
 
-    // Validate all server-only Twilio settings before creating storage objects or a send record.
-    getTwilioWhatsAppConfiguration();
-
     const snapshot = await loadQuoteSnapshot(authorizedQuote.id);
+    const mode = getWhatsAppDeliveryMode();
+    if (mode === "customer_initiated") {
+      const token = await getOrCreateDeliveryToken(authorizedQuote.id);
+      const message = `Quiero recibir mi cotizaciÃ³n ${authorizedQuote.folio} ${token.token}`;
+      const waLink = `https://wa.me/${getWhatsAppSenderDigits()}?text=${encodeURIComponent(message)}`;
+      return { mode, token: token.token, waLink, status: "PENDING", destination: normalizeWhatsAppPhone(snapshot.customer.whatsapp).e164 };
+    }
+    // Validate all server-only Twilio settings before creating storage objects or a send record.
+    getTwilioWhatsAppConfiguration({ requireContentSid: true });
+
     const destination = normalizeWhatsAppPhone(snapshot.customer.whatsapp);
     const admin = createSupabaseAdminClient();
     const { data: existing, error: existingError } = await admin
@@ -329,6 +333,7 @@ export async function sendQuoteViaWhatsApp(
         customer_whatsapp_snapshot: destination.e164,
         provider: "TWILIO",
         status: "SENDING",
+        delivery_method: "TEMPLATE",
       });
 
       if (insertError) {
@@ -358,10 +363,6 @@ export async function sendQuoteViaWhatsApp(
     const sent = await sendQuoteWhatsAppWithTwilio({
       customerName: snapshot.customer.name,
       customerWhatsApp: snapshot.customer.whatsapp,
-      folio: snapshot.folio,
-      machineName: snapshot.machine.name,
-      total: asMoney(snapshot.total),
-      sellerName: snapshot.sellerName,
       mediaUrl,
     });
 
@@ -417,4 +418,12 @@ export async function sendQuoteViaWhatsApp(
       status: "FAILED",
     };
   }
+}
+
+export async function getWhatsAppDeliveryState(quoteId: string): Promise<{ status: WhatsAppMessageStatus | null; destination: string | null }> {
+  const quote = await getAuthorizedQuote(quoteId);
+  const admin = createSupabaseAdminClient();
+  const result = await admin.from("whatsapp_messages").select("status, customer_whatsapp_snapshot").eq("quote_id", quote.id).maybeSingle();
+  if (result.error) throw new Error("No se pudo consultar el estado de WhatsApp.");
+  return { status: (result.data?.status as WhatsAppMessageStatus | undefined) ?? null, destination: result.data?.customer_whatsapp_snapshot ?? null };
 }

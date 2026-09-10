@@ -75,6 +75,8 @@ function wrapText(text: string, font: PDFFont, size: number, maxWidth: number) {
 async function loadCroppedLogo(): Promise<Uint8Array> {
   const response = await cacheMachineImage(logoPath);
   if (!response.ok) throw new Error("No se pudo cargar el logotipo de Nahuitech.");
+  // Preserve the complete source artwork; automatic alpha-bound cropping could clip the logo mark.
+  return new Uint8Array(await (await response.blob()).arrayBuffer());
 
   const source = URL.createObjectURL(await response.blob());
 
@@ -88,7 +90,7 @@ async function loadCroppedLogo(): Promise<Uint8Array> {
     const sourceCanvas = document.createElement("canvas");
     sourceCanvas.width = image.naturalWidth;
     sourceCanvas.height = image.naturalHeight;
-    const sourceContext = sourceCanvas.getContext("2d", { willReadFrequently: true });
+    const sourceContext = sourceCanvas.getContext("2d", { willReadFrequently: true })!;
     if (!sourceContext) throw new Error("No se pudo procesar el logotipo de Nahuitech.");
 
     sourceContext.drawImage(image, 0, 0);
@@ -128,7 +130,7 @@ async function loadCroppedLogo(): Promise<Uint8Array> {
     const croppedCanvas = document.createElement("canvas");
     croppedCanvas.width = cropWidth;
     croppedCanvas.height = cropHeight;
-    const croppedContext = croppedCanvas.getContext("2d");
+    const croppedContext = croppedCanvas.getContext("2d")!;
     if (!croppedContext) throw new Error("No se pudo preparar el logotipo de Nahuitech.");
 
     croppedContext.drawImage(

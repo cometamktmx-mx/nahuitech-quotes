@@ -225,6 +225,23 @@ function validateItems(items: QuoteItemInput[]) {
   }
 }
 
+async function validateAddonQuantityRules(supabase: Awaited<ReturnType<typeof getSellerClient>>, machineId: string, quantities: Record<string, number>) {
+  const extraCrossLaserAddonId = "d2486323-5daa-418a-8cc3-f25215f1357b";
+  const doubleTimeAddonId = "a3efa6fd-05cb-4917-96d1-67a0d81c7a45";
+  const [{ data: machine }, { data: addons }] = await Promise.all([
+    supabase.from("machines").select("name,slug").eq("id", machineId).single(),
+    supabase.from("addons").select("id,name").in("id", Object.keys(quantities)),
+  ]);
+  const ome = `${machine?.slug ?? ""} ${machine?.name ?? ""}`.toLowerCase().includes("ome");
+  for (const addon of addons ?? []) {
+    const quantity = quantities[addon.id] ?? 0;
+    const isDouble = addon.id === doubleTimeAddonId;
+    const isLaser = addon.id === extraCrossLaserAddonId;
+    const max = isDouble ? (ome ? 2 : 1) : isLaser ? 4 : null;
+    if (max !== null && (!Number.isSafeInteger(quantity) || quantity < 0 || quantity > max)) throw new ValidationError(`La cantidad de ${addon.name} debe estar entre 0 y ${max}.`);
+  }
+}
+
 function validateInput(input: CreateQuoteInput) {
   validateConfiguration(input.machineId, input.addonQuantities);
   if (input.items) validateItems(input.items);
@@ -500,6 +517,9 @@ export async function createQuote(
 ): Promise<CreateQuoteResult> {
   try {
     validateInput(input);
+    const sellerClient = await getSellerClient();
+    await validateAddonQuantityRules(sellerClient, input.machineId, input.addonQuantities);
+    if (input.items) for (const item of input.items) await validateAddonQuantityRules(sellerClient, item.machineId, item.addonQuantities);
 
     const supabase = await getSellerClient();
     if (!input.items) await validateMachineVariantSelection(

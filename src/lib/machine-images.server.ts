@@ -43,17 +43,20 @@ export async function uploadMachineImage(supabase: SupabaseClient, machineId: st
   const processor = sharp(source, { limitInputPixels: 40_000_000, animated: false });
   const metadata = await processor.metadata();
   if (!['png', 'jpeg', 'webp'].includes(metadata.format ?? '')) throw new Error('El archivo no es una fotografía válida.');
-  const bytes = await processor.rotate().resize(2000, 2000, { fit: 'inside', withoutEnlargement: true })
-    .flatten({ background: '#ffffff' }).jpeg({ quality: 90, mozjpeg: true }).toBuffer();
+  const resized = processor.rotate().resize(2000, 2000, { fit: 'inside', withoutEnlargement: true });
+  const preserveAlpha = metadata.hasAlpha === true;
+  const bytes = preserveAlpha
+    ? await resized.png({ compressionLevel: 9 }).toBuffer()
+    : await resized.jpeg({ quality: 90, mozjpeg: true }).toBuffer();
   // Immutable versions preserve remote and not-yet-synced offline snapshots.
   const path = `machines/${machineId}/${crypto.randomUUID()}.jpg`;
   const { error } = await supabase.storage.from('machine-images').upload(path, bytes, {
-    contentType: 'image/jpeg', cacheControl: '31536000', upsert: false,
+    contentType: preserveAlpha ? 'image/png' : 'image/jpeg', cacheControl: '31536000', upsert: false,
   });
   if (error) {
     logMachineImageStorageError('[machine image upload error]', error);
     console.error('[machine image upload context]', {
-      bucket: 'machine-images', path, contentType: 'image/jpeg', size: bytes.byteLength,
+      bucket: 'machine-images', path, contentType: preserveAlpha ? 'image/png' : 'image/jpeg', size: bytes.byteLength,
       authenticated: true, role: profile.role, active: profile.active,
     });
     throw new Error('No se pudo subir la fotografía. Verifica el bucket machine-images y sus políticas.');

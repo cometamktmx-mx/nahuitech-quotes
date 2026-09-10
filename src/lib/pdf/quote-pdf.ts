@@ -226,7 +226,7 @@ function addHeader(context: DrawingContext, snapshot: QuotePdfSnapshot, compact 
     return;
   }
 
-  const logoScale = Math.min(132 / logo.width, 36 / logo.height);
+  const logoScale = Math.min(180 / logo.width, 42 / logo.height);
   const logoWidth = logo.width * logoScale;
   const logoHeight = logo.height * logoScale;
 

@@ -75,9 +75,6 @@ function wrapText(text: string, font: PDFFont, size: number, maxWidth: number) {
 async function loadCroppedLogo(): Promise<Uint8Array> {
   const response = await cacheMachineImage(logoPath);
   if (!response.ok) throw new Error("No se pudo cargar el logotipo de Nahuitech.");
-  // Preserve the complete source artwork; automatic alpha-bound cropping could clip the logo mark.
-  return new Uint8Array(await (await response.blob()).arrayBuffer());
-
   const source = URL.createObjectURL(await response.blob());
 
   try {
@@ -122,7 +119,7 @@ async function loadCroppedLogo(): Promise<Uint8Array> {
       return new Uint8Array(await (await fetch(source)).arrayBuffer());
     }
 
-    const padding = 12;
+    const padding = 20;
     const cropLeft = Math.max(0, left - padding);
     const cropTop = Math.max(0, top - padding);
     const cropWidth = Math.min(sourceCanvas.width - cropLeft, right - left + padding * 2 + 1);
@@ -226,45 +223,45 @@ function addHeader(context: DrawingContext, snapshot: QuotePdfSnapshot, compact 
     return;
   }
 
-  const logoScale = Math.min(180 / logo.width, 42 / logo.height);
+  const logoScale = Math.min(220 / logo.width, 56 / logo.height);
   const logoWidth = logo.width * logoScale;
   const logoHeight = logo.height * logoScale;
 
   page.drawRectangle({
     x: margin,
-    y: top - 52,
+    y: top - 70,
     width: pageWidth - margin * 2,
-    height: 52,
+    height: 70,
     color: rgbFromHex(pdf, quotePdfBrand.graphite),
   });
   page.drawImage(logo, {
     x: margin + 14,
-    y: top - 26 - logoHeight / 2,
+    y: top - 35 - logoHeight / 2,
     width: logoWidth,
     height: logoHeight,
   });
   page.drawText("COTIZACIÓN", {
     x: pageWidth - margin - bold.widthOfTextAtSize("COTIZACIÓN", 15),
-    y: top - 18,
+    y: top - 20,
     size: 15,
     font: bold,
     color: rgbFromHex(pdf, quotePdfBrand.white),
   });
   page.drawText(snapshot.folio, {
     x: pageWidth - margin - regular.widthOfTextAtSize(snapshot.folio, 9.5),
-    y: top - 34,
+    y: top - 40,
     size: 9.5,
     font: regular,
     color: rgbFromHex(pdf, quotePdfBrand.logoPeach),
   });
   page.drawText(dateFormatter.format(new Date(snapshot.createdAt)), {
     x: pageWidth - margin - regular.widthOfTextAtSize(dateFormatter.format(new Date(snapshot.createdAt)), 8),
-    y: top - 46,
+    y: top - 57,
     size: 8,
     font: regular,
     color: rgbFromHex(pdf, quotePdfBrand.neutral),
   });
-  context.cursorY = top - 68;
+  context.cursorY = top - 86;
 }
 
 function addPage(context: DrawingContext, snapshot: QuotePdfSnapshot) {

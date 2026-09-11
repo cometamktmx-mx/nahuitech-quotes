@@ -705,6 +705,52 @@ function drawCommercialInfo(context: DrawingContext, snapshot: QuotePdfSnapshot)
   ]);
 }
 
+function drawCommercialConditions(context: DrawingContext, snapshot: QuotePdfSnapshot) {
+  const paragraphs = [
+    "La presente cotización tiene una vigencia de 15 días naturales a partir de su fecha de emisión.",
+    "Para confirmar el pedido se requiere un anticipo del 50% del valor total de la cotización. El 50% restante deberá liquidarse antes del envío del equipo.",
+  ];
+  const bodyWidth = pageWidth - margin * 2 - 28;
+  const lineHeight = 10.5;
+  const paragraphGap = 7;
+  const bodyLines = paragraphs.map((paragraph) => wrapText(paragraph, context.bold, 8.2, bodyWidth));
+  const bodyHeight = bodyLines.reduce((total, lines) => total + lines.length * lineHeight, 0) + paragraphGap;
+  const boxHeight = bodyHeight + 24;
+
+  drawSectionTitle(context, snapshot, "CONDICIONES COMERCIALES", boxHeight + 8);
+  const boxBottom = context.cursorY - boxHeight;
+  context.page.drawRectangle({
+    x: margin,
+    y: boxBottom,
+    width: pageWidth - margin * 2,
+    height: boxHeight,
+    color: rgbFromHex(context.pdf, quotePdfBrand.neutral),
+  });
+  context.page.drawRectangle({
+    x: margin,
+    y: boxBottom,
+    width: 4,
+    height: boxHeight,
+    color: rgbFromHex(context.pdf, quotePdfBrand.logoPeach),
+  });
+
+  let lineY = context.cursorY - 16;
+  bodyLines.forEach((lines, paragraphIndex) => {
+    lines.forEach((line) => {
+      context.page.drawText(line, {
+        x: margin + 14,
+        y: lineY,
+        size: 8.2,
+        font: context.bold,
+        color: rgbFromHex(context.pdf, quotePdfBrand.graphite),
+      });
+      lineY -= lineHeight;
+    });
+    if (paragraphIndex < bodyLines.length - 1) lineY -= paragraphGap;
+  });
+  context.cursorY = boxBottom - 8;
+}
+
 function drawFooter(context: DrawingContext, snapshot: QuotePdfSnapshot, index: number, total: number) {
   const footer = `NAHUITECH | ${snapshot.folio} | Página ${index} de ${total}`;
   context.page.drawLine({
@@ -772,6 +818,7 @@ export async function generateQuotePdf(
   drawDelivery(context, snapshot);
   drawPromotionAndFinancialSummary(context, snapshot);
   drawCommercialInfo(context, snapshot);
+  drawCommercialConditions(context, snapshot);
 
   const pages = document.getPages();
   pages.forEach((page, index) => {

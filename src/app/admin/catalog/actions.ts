@@ -389,9 +389,10 @@ export async function saveAddon(formData: FormData): Promise<CatalogActionResult
         throw new Error("No se pudo actualizar el add-on.");
       }
     } else {
+      const { data: lastAddon } = await supabase.from("addons").select("display_order").order("display_order", { ascending: false }).limit(1).maybeSingle();
       const { data, error } = await supabase
         .from("addons")
-        .insert(payload)
+        .insert({ ...payload, display_order: Number(lastAddon?.display_order ?? 0) + 1 })
         .select("id")
         .single();
 
@@ -458,4 +459,18 @@ export async function deleteAddon(id: string): Promise<CatalogActionResult> {
   } catch (error) {
     return actionError(error, "No se pudo eliminar el add-on.");
   }
+}
+
+export async function saveAddonOrder(ids: string[]): Promise<CatalogActionResult> {
+  try {
+    const supabase = await getAdminClient();
+    if (!Array.isArray(ids) || ids.some((id) => !uuidPattern.test(id)) || new Set(ids).size !== ids.length) throw new ValidationError("El orden de add-ons no es válido.");
+    for (const [index, id] of ids.entries()) {
+      const { error } = await supabase.from("addons").update({ display_order: index + 1 }).eq("id", id);
+      if (error) throw new Error("No se pudo guardar el orden de add-ons.");
+    }
+    revalidatePath("/admin/catalog");
+    revalidatePath("/seller", "layout");
+    return {};
+  } catch (error) { return actionError(error, "No se pudo guardar el orden de add-ons."); }
 }

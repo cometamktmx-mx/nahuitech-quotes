@@ -75,10 +75,10 @@ export default async function SellerQuotePage({ params }: SellerQuotePageProps) 
     if (addonIds.length > 0) {
       const { data: addonRows, error: addonsError } = await supabase
         .from("addons")
-        .select("id, name, description, unit_price, calculation_type, required")
+        .select("id, name, description, unit_price, calculation_type, required, display_order")
         .in("id", addonIds)
         .eq("active", true)
-        .order("name");
+        .order("display_order", { ascending: true, nullsFirst: false }).order("name");
 
       if (addonsError) {
         throw new Error("No se pudieron cargar los add-ons compatibles.");
@@ -93,6 +93,7 @@ export default async function SellerQuotePage({ params }: SellerQuotePageProps) 
           : asCatalogNumber(relationByAddonId.get(addon.id)?.unit_price_override),
         calculationType: addon.calculation_type,
         required: addon.required,
+        displayOrder: addon.display_order,
       }));
     }
   }

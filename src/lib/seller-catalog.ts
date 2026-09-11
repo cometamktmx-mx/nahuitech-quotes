@@ -33,6 +33,7 @@ export type SellerAddon = {
   unitPrice: number;
   calculationType: "FIXED" | "PER_BASE" | "QUANTITY";
   required: boolean;
+  displayOrder: number;
 };
 
 export function asCatalogNumber(value: unknown) {

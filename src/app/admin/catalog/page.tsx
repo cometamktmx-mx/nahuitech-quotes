@@ -26,8 +26,8 @@ export default async function AdminCatalogPage() {
       .order("name"),
     supabase
       .from("addons")
-      .select("id, name, description, unit_price, calculation_type, required, active")
-      .order("name"),
+      .select("id, name, description, unit_price, calculation_type, required, active, display_order")
+      .order("display_order", { ascending: true, nullsFirst: false }).order("name"),
     supabase.from("machine_addons").select("machine_id, addon_id, unit_price_override, description_override"),
     supabase.from("machine_variants").select("id, machine_id, variant_type, display_name, price, description, active, sort_order").order("sort_order"),
   ]);
@@ -78,6 +78,7 @@ export default async function AdminCatalogPage() {
     calculationType: addon.calculation_type,
     required: addon.required,
     active: addon.active,
+    displayOrder: addon.display_order,
     compatibilities: machineIdsByAddon.get(addon.id) ?? [],
   }));
 

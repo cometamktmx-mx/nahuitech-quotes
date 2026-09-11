@@ -70,9 +70,9 @@ async function syncOfflineCatalogInternal() {
       .order("sort_order"),
     supabase
       .from("addons")
-      .select("id, name, description, unit_price, calculation_type, required, active")
+      .select("id, name, description, unit_price, calculation_type, required, active, display_order")
       .eq("active", true)
-      .order("name"),
+      .order("display_order", { ascending: true, nullsFirst: false }).order("name"),
     supabase
       .from("machine_addons")
       .select("machine_id, addon_id, active, unit_price_override, description_override")
@@ -151,6 +151,7 @@ async function syncOfflineCatalogInternal() {
     calculationType: addon.calculation_type,
     required: addon.required,
     active: addon.active,
+    displayOrder: addon.display_order,
   }));
   const machineAddons: OfflineMachineAddon[] = relationRows.map((relation) => ({
     machineId: relation.machine_id,

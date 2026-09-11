@@ -17,6 +17,7 @@ import {
   saveAddon,
   saveMachine,
   setAddonActive,
+  saveAddonOrder,
   setMachineActive,
 } from "./actions";
 
@@ -45,6 +46,7 @@ export type CatalogAddon = {
   calculationType: "FIXED" | "PER_BASE" | "QUANTITY";
   required: boolean;
   active: boolean;
+  displayOrder: number;
   compatibilities: Array<{
     machineId: string;
     unitPriceOverride: number | null;
@@ -502,6 +504,7 @@ export function CatalogManager({ machines, addons }: CatalogManagerProps) {
   const [addonEditor, setAddonEditor] = useState<CatalogAddon | "new" | null>(null);
   const [notice, setNotice] = useState("");
   const [isMutating, setIsMutating] = useState(false);
+  const [addonOrder, setAddonOrder] = useState(addons);
 
   function handleSaved() {
     setMachineEditor(null);
@@ -539,6 +542,11 @@ export function CatalogManager({ machines, addons }: CatalogManagerProps) {
 
     await runListAction(() => deleteAddon(addon.id));
   }
+  async function moveAddon(index: number, direction: -1 | 1) {
+    const next = [...addonOrder]; const target = index + direction; if (target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target], next[index]]; setAddonOrder(next);
+    await runListAction(() => saveAddonOrder(next.map((addon) => addon.id)));
+  }
 
   return (
     <main className="mx-auto grid max-w-7xl gap-8 px-5 py-8 md:px-8 md:py-12">
@@ -574,6 +582,7 @@ export function CatalogManager({ machines, addons }: CatalogManagerProps) {
             <div><h2 className="text-xl font-bold text-foreground">Add-ons</h2><p className="mt-1 text-sm text-muted">Precios, reglas de cálculo y compatibilidades por máquina.</p></div>
             <PrimaryButton onClick={() => setAddonEditor("new")}><CatalogIcon className="size-5" name="plus" />Nuevo add-on</PrimaryButton>
           </div>
+          <section className="rounded-2xl border border-border bg-surface p-5"><h2 className="text-xl font-bold">Orden global de add-ons</h2><p className="mt-1 text-sm text-muted">Este orden se aplica al cotizador para todas las máquinas compatibles.</p><div className="mt-4 grid gap-2">{addonOrder.map((addon,index)=><div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3" key={addon.id}><span className="flex items-center gap-3"><span className="grid size-8 place-items-center rounded-lg bg-surface-muted font-bold">{index+1}</span><span className="font-semibold">{addon.name}</span></span><span className="flex gap-2"><button className="rounded-lg border border-border px-3 py-2 text-sm font-bold disabled:opacity-40" disabled={isMutating||index===0} onClick={()=>void moveAddon(index,-1)} type="button">↑ Subir</button><button className="rounded-lg border border-border px-3 py-2 text-sm font-bold disabled:opacity-40" disabled={isMutating||index===addonOrder.length-1} onClick={()=>void moveAddon(index,1)} type="button">↓ Bajar</button></span></div>)}</div>{notice?<p className="mt-3 text-sm font-semibold text-danger">{notice}</p>:null}</section>
           {addons.length === 0 ? (
             <EmptyState action={<PrimaryButton onClick={() => setAddonEditor("new")}><CatalogIcon className="size-5" name="plus" />Agregar add-on</PrimaryButton>} description="Crea el primer add-on y define en qué máquinas estará disponible." icon={<CatalogIcon className="size-8" name="addon" />} title="No hay add-ons todavía" />
           ) : (

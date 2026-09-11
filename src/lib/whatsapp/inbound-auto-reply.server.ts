@@ -3,12 +3,7 @@ import twilio from "twilio";
 import { normalizeWhatsAppPhone } from "./phone";
 import { getTwilioWhatsAppConfiguration } from "./twilio.server";
 
-export const inboundAutoReplyBody = `Hola
-Este número se utiliza únicamente para el envío automático de cotizaciones de Nahuitech.
-Para dudas, cambios o seguimiento de tu cotización, escríbenos directamente a nuestro WhatsApp de atención:
-445 261 0873
-https://wa.me/524452610873
-Con gusto continuaremos tu atención por ese medio.`;
+export const inboundAutoReplyBody = "Hola  Este número de Nahuitech se utiliza únicamente para el envío automático de cotizaciones. Para atención, dudas, ajustes o seguimiento, comunícate por WhatsApp al 445 261 0873. Con gusto te atenderemos.";
 
 export async function sendInboundAutoReply(fromPhone: string) {
   const configuration = getTwilioWhatsAppConfiguration();

@@ -27,7 +27,11 @@ export async function POST(request: Request) {
   const claimed = await admin.from("whatsapp_inbound_auto_replies").insert({ message_sid: messageSid, from_phone: fromPhone, to_phone: toPhone, status: "RECEIVED" }).select("id").single();
   if (claimed.error) {
     const duplicate = await admin.from("whatsapp_inbound_auto_replies").select("id").eq("message_sid", messageSid).maybeSingle();
-    if (duplicate.data) return xml();
+    if (duplicate.data) {
+      console.log("[inbound auto reply]", { messageSidPartial: partial(messageSid), phoneMasked: "â€¦", existingReplyWithin24h: false, duplicateMessageSid: true, replyAttempted: false, replySent: false, reason: "DUPLICATE" });
+      return xml();
+    }
+    console.error("[inbound auto reply error]", { code: "INBOUND_DEDUPE_RECORD_FAILED", status: null, message: claimed.error.message });
     return xml();
   }
   const replyId = claimed.data.id;
@@ -52,9 +56,31 @@ export async function POST(request: Request) {
     try { const sent = await sendCustomerInitiatedWhatsAppWithTwilio({ customerName: snapshot.customer.name, customerWhatsApp: phone.e164, mediaUrl }); await admin.from("whatsapp_messages").update({ status: "SENT", provider_message_id: sent.providerMessageId, sent_at: new Date().toISOString() }).eq("quote_id", tokenRow.quote_id); await admin.from("quote_delivery_tokens").update({ used_at: new Date().toISOString() }).eq("token", tokenRow.token); } catch (error) { await admin.from("whatsapp_messages").update({ status: "FAILED", error_code: "TWILIO_SEND_FAILED", error_message: error instanceof Error ? error.message.slice(0, 500) : "send failed" }).eq("quote_id", tokenRow.quote_id); }
     return xml();
   }
-  const recent = await admin.from("whatsapp_inbound_auto_replies").select("id").eq("from_phone", fromPhone).gte("received_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()).in("status", ["SENT", "SENDING", "RECEIVED"]).limit(1);
-  if (recent.data?.length) { await admin.from("whatsapp_inbound_auto_replies").update({ status: "SKIPPED_RATE_LIMIT" }).eq("id", replyId); return xml(); }
+  console.log("[inbound fallback decision]", { hasValidDeliveryToken: false, willRunAutoReply: true });
+  const recent = await admin
+    .from("whatsapp_inbound_auto_replies")
+    .select("id")
+    .eq("from_phone", fromPhone)
+    .neq("id", replyId)
+    .gte("received_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+    .in("status", ["SENT", "SENDING", "RECEIVED"])
+    .limit(1);
+  const existingReplyWithin24h = Boolean(recent.data?.length);
+  if (existingReplyWithin24h) {
+    await admin.from("whatsapp_inbound_auto_replies").update({ status: "SKIPPED_RATE_LIMIT" }).eq("id", replyId);
+    console.log("[inbound auto reply]", { messageSidPartial: partial(messageSid), phoneMasked: partial(fromPhone), existingReplyWithin24h: true, duplicateMessageSid: false, replyAttempted: false, replySent: false, reason: "RATE_LIMITED" });
+    return xml();
+  }
   await admin.from("whatsapp_inbound_auto_replies").update({ status: "SENDING" }).eq("id", replyId);
-  try { const sent = await sendInboundAutoReply(fromPhone); await admin.from("whatsapp_inbound_auto_replies").update({ status: "SENT", replied_at: new Date().toISOString(), reply_message_sid: sent.providerMessageId }).eq("id", replyId); } catch (error) { await admin.from("whatsapp_inbound_auto_replies").update({ status: "FAILED", error_code: "TWILIO_SEND_FAILED", error_message: error instanceof Error ? error.message.slice(0, 500) : "send failed" }).eq("id", replyId); }
+  try {
+    const sent = await sendInboundAutoReply(fromPhone);
+    await admin.from("whatsapp_inbound_auto_replies").update({ status: "SENT", replied_at: new Date().toISOString(), reply_message_sid: sent.providerMessageId }).eq("id", replyId);
+    console.log("[inbound auto reply]", { messageSidPartial: partial(messageSid), phoneMasked: partial(fromPhone), existingReplyWithin24h: false, duplicateMessageSid: false, replyAttempted: true, replySent: true, reason: "SENT" });
+  } catch (error) {
+    const twilioError = error as { code?: unknown; status?: unknown; message?: unknown };
+    console.error("[inbound auto reply error]", { code: twilioError.code ?? "TWILIO_SEND_FAILED", status: twilioError.status ?? null, message: error instanceof Error ? error.message.slice(0, 500) : "send failed" });
+    await admin.from("whatsapp_inbound_auto_replies").update({ status: "FAILED", error_code: String(twilioError.code ?? "TWILIO_SEND_FAILED"), error_message: error instanceof Error ? error.message.slice(0, 500) : "send failed" }).eq("id", replyId);
+    console.log("[inbound auto reply]", { messageSidPartial: partial(messageSid), phoneMasked: partial(fromPhone), existingReplyWithin24h: false, duplicateMessageSid: false, replyAttempted: true, replySent: false, reason: "ERROR" });
+  }
   return xml();
 }

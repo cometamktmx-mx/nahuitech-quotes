@@ -94,7 +94,7 @@ export default async function SellerPage() {
     }).format(new Date(quote.created_at)),
   }));
 
-  const { data: salespeople } = profile.role === "expo"
+  const { data: salespeople } = (profile.role === "expo" || profile.role === "admin")
     ? await supabase
         .from("salespeople")
         .select("id, full_name, sort_order")
@@ -107,7 +107,7 @@ export default async function SellerPage() {
     <SellerOfflineProvider initialAccountRole={profile.role}>
       <div className="min-h-screen bg-background">
         <SellerShellHeader accountRole={profile.role} userName={profile.full_name} />
-        <ExpoSellerSelector isExpoAccount={profile.role === "expo"} salespeople={(salespeople ?? []).map((salesperson) => ({ id: salesperson.id, fullName: salesperson.full_name }))}>
+        <ExpoSellerSelector isExpoAccount={(profile.role === "expo" || profile.role === "admin")} salespeople={(salespeople ?? []).map((salesperson) => ({ id: salesperson.id, fullName: salesperson.full_name }))}>
         <main className="mx-auto grid max-w-7xl gap-8 px-5 py-8 md:px-8 md:py-12">
         <header className="max-w-3xl">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Cotizador Expo</p>

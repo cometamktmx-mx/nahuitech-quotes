@@ -51,6 +51,10 @@ export function AdminNav({ active, userName }: AdminNavProps) {
           </Link>
         </nav>
 
+        <Link className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" href="/seller">
+          Crear cotización
+        </Link>
+
         <div className="hidden items-center gap-3 lg:flex">
           <span className="grid size-9 place-items-center rounded-full bg-primary text-xs font-black text-primary-foreground">
             {initials(userName)}

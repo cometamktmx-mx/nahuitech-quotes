@@ -90,7 +90,7 @@ export async function updateSession(request: NextRequest) {
 
   const defaultPath = profile.role === "admin" ? "/admin" : "/seller";
   const hasSellerFlowAccess =
-    profile.role === "seller" || profile.role === "expo";
+    profile.role === "admin" || profile.role === "seller" || profile.role === "expo";
 
   if (isLoginRoute || (isAdminRoute && profile.role !== "admin")) {
     return redirectWithSessionCookies(request, defaultPath, supabaseResponse);

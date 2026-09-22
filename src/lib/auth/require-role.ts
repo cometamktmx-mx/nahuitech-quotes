@@ -45,8 +45,7 @@ export async function requireSellerFlowRole() {
     .maybeSingle();
 
   if (error || !profile || !profile.active) redirect("/login");
-  if (profile.role === "admin") redirect("/admin");
-  if (profile.role !== "seller" && profile.role !== "expo") redirect("/login");
+  if (profile.role !== "admin" && profile.role !== "seller" && profile.role !== "expo") redirect("/login");
 
   return profile;
 }

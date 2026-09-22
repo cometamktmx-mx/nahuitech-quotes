@@ -11,7 +11,7 @@ export function SellerShellHeader({
   accountRole,
 }: {
   userName: string;
-  accountRole: "seller" | "expo";
+  accountRole: "admin" | "seller" | "expo";
 }) {
   return (
     <header className="border-b border-on-graphite/10 bg-graphite text-on-graphite">
@@ -25,6 +25,7 @@ export function SellerShellHeader({
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-4 sm:justify-end">
+          {accountRole === "admin" ? <Link className="text-sm font-bold text-primary" href="/admin">Admin</Link> : null}
           <SellerOfflineStatus />
           <SellerAttendingControl accountRole={accountRole} userName={userName} />
           <SellerSessionControls />

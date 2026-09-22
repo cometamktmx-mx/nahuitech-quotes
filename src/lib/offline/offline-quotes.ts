@@ -224,7 +224,7 @@ export async function createOfflineQuote(input: OfflineQuoteInput) {
     loadOfflineItems(input),
   ]);
 
-  if (!profile || !profile.active || (profile.role !== "seller" && profile.role !== "expo")) {
+  if (!profile || !profile.active || (profile.role !== "admin" && profile.role !== "seller" && profile.role !== "expo")) {
     throw new OfflineQuoteValidationError(
       "Necesitas una sesión de vendedor preparada en este dispositivo para cotizar sin conexión."
     );
@@ -235,7 +235,7 @@ export async function createOfflineQuote(input: OfflineQuoteInput) {
   let salespersonId: string | null = null;
   let salespersonName: string;
 
-  if (profile.role === "expo") {
+  if ((profile.role === "expo" || profile.role === "admin")) {
     if (!input.salespersonId) {
       throw new OfflineQuoteValidationError("Selecciona quién está atendiendo antes de cotizar.");
     }

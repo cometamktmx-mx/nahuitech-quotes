@@ -130,7 +130,7 @@ export default async function SellerQuotePage({ params }: SellerQuotePageProps) 
     <SellerOfflineProvider initialAccountRole={profile.role}>
       <div className="min-h-screen bg-background">
         <SellerShellHeader accountRole={profile.role} userName={profile.full_name} />
-        <SellerQuoteConfigurator addons={addons} isExpoAccount={profile.role === "expo"} machine={selectedMachine} variants={variants} />
+        <SellerQuoteConfigurator addons={addons} isExpoAccount={(profile.role === "expo" || profile.role === "admin")} machine={selectedMachine} variants={variants} />
       </div>
     </SellerOfflineProvider>
   );

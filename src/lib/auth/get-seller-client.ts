@@ -20,7 +20,7 @@ export async function getSellerClient() {
     profileError ||
     !profile ||
     !profile.active ||
-    (profile.role !== "seller" && profile.role !== "expo")
+    (profile.role !== "admin" && profile.role !== "seller" && profile.role !== "expo")
   ) {
     throw new Error("No autorizado.");
   }

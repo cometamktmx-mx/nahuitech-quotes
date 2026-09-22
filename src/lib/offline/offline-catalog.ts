@@ -112,7 +112,7 @@ async function syncOfflineCatalogInternal() {
     profileResult.error ||
     !profileResult.data ||
     !profileResult.data.active ||
-    (profileResult.data.role !== "seller" && profileResult.data.role !== "expo")
+    (profileResult.data.role !== "admin" && profileResult.data.role !== "seller" && profileResult.data.role !== "expo")
   ) {
     throw new Error("Tu perfil no está disponible para el modo offline.");
   }

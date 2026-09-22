@@ -138,7 +138,7 @@ export function MultiQuoteFlow({ machine, addons, variants = [], isExpoAccount =
     finally { setBusy(false); }
   }
 
-  if ((isExpoAccount || offline?.accountRole === "expo") && !offline?.salespersonId) return <main className={panelClass}>Selecciona quién está atendiendo antes de cotizar.<Link href="/seller">Elegir vendedor</Link></main>;
+  if ((isExpoAccount || offline?.accountRole === "expo" || offline?.accountRole === "admin") && !offline?.salespersonId) return <main className={panelClass}>Selecciona quién está atendiendo antes de cotizar.<Link href="/seller">Elegir vendedor</Link></main>;
   if (!draft) return <main className="p-8">{error || "Preparando cotización…"}</main>;
   const pdf = local?.pdfSnapshot ?? created?.pdfSnapshot;
   if (local || created?.quoteId) return <main className="mx-auto grid max-w-3xl gap-5 p-6">

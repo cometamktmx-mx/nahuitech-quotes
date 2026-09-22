@@ -23,7 +23,7 @@ type SellerOfflineState = {
   isReady: boolean;
   isOnline: boolean;
   sellerId: string | null;
-  accountRole: "seller" | "expo" | null;
+  accountRole: "admin" | "seller" | "expo" | null;
   salespersonId: string | null;
   salespersonName: string | null;
   lastSyncedAt: string | null;
@@ -96,13 +96,13 @@ export function SellerOfflineProvider({
   initialAccountRole,
 }: {
   children: ReactNode;
-  initialAccountRole?: "seller" | "expo";
+  initialAccountRole?: "admin" | "seller" | "expo";
 }) {
   const router = useRouter();
   const [isReady, setIsReady] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [sellerId, setSellerId] = useState<string | null>(null);
-  const [accountRole, setAccountRole] = useState<"seller" | "expo" | null>(initialAccountRole ?? null);
+  const [accountRole, setAccountRole] = useState<"admin" | "seller" | "expo" | null>(initialAccountRole ?? null);
   const [salespersonId, setSalespersonId] = useState<string | null>(null);
   const [salespersonName, setSalespersonName] = useState<string | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
@@ -185,7 +185,7 @@ export function SellerOfflineProvider({
         : null;
       setSalespersonId(linkedSalesperson?.active ? linkedSalesperson.id : null);
       setSalespersonName(linkedSalesperson?.active ? linkedSalesperson.fullName : profile.fullName);
-    } else if (role === "expo") {
+    } else if (role === "expo" || role === "admin") {
       const selected = await getOfflineSelectedSalesperson(currentSellerId);
       if (selected) {
         const selectedSalesperson = await offlineDb.salespeople.get(selected.salespersonId);
@@ -210,7 +210,7 @@ export function SellerOfflineProvider({
   }, [getBrowserClient, initialAccountRole]);
 
   const selectSalesperson = useCallback(async (selectedId: string) => {
-    if (!sellerId || accountRole !== "expo") return;
+    if (!sellerId || (accountRole !== "expo" && accountRole !== "admin")) return;
     let selectedSalesperson = await offlineDb.salespeople.get(selectedId);
 
     if (!selectedSalesperson && typeof navigator !== "undefined" && navigator.onLine) {
@@ -244,7 +244,7 @@ export function SellerOfflineProvider({
   }, [accountRole, getBrowserClient, sellerId]);
 
   const clearSalesperson = useCallback(async () => {
-    if (!sellerId || accountRole !== "expo") return;
+    if (!sellerId || (accountRole !== "expo" && accountRole !== "admin")) return;
     await clearOfflineSelectedSalesperson(sellerId);
     setSalespersonId(null);
     setSalespersonName(null);

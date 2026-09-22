@@ -39,7 +39,7 @@ export type OfflineCouponMachine = {
 export type OfflineSellerProfile = {
   id: string;
   fullName: string;
-  role: "seller" | "expo";
+  role: "admin" | "seller" | "expo";
   active: boolean;
   salespersonId: string | null;
   syncedAt: string;

@@ -1,12 +1,14 @@
 # Sales Network — staging real para Camilo
 
+**Corrección 19 octubre:** el baseline combinado anterior quedó corrupto por codificación. Regenerar con Node y usar exclusivamente el bootstrap consolidado nuevo; no concatenar archivos en PowerShell. Ver [investigación, corrección y recuperación del staging parcial](sales-network-staging-bootstrap.md).
+
 Estado de entrega: preparación local; **ninguna conexión, migración, seed, reset o deployment remoto ejecutado**. No se puede certificar el estado de un staging que aún no se inspeccionó. Features congeladas. Rama local: `feat/sales-network-beta`. No usar main para esta demo.
 
 Validación local final: **136 tests aprobados, 0 fallos/omitidos** (~8.3 s), `npx tsc --noEmit` correcto, lint sin errores salvo warning histórico de `<img>`, `npm run build` correcto (compilación 2.6 s, TypeScript 7.8 s). Build ejecutado con valores ficticios explícitos de Supabase y Twilio vacío, sin usar credenciales reales para escrituras. El reset se probó también contra PostgreSQL aislado con foreign keys reales, dos ejecuciones consecutivas y conservación de registros ajenos. Los tiempos no representan latencia remota; E2E Auth/Storage y latencias staging siguen pendientes.
 
 ## A. Identificar el destino antes de cualquier escritura
 
-1. Crear/seleccionar un proyecto Supabase dedicado de staging. Anotar su project ref (20 caracteres) desde Project Settings y comprobar la URL del dashboard `/project/<ref>`. El nombre visible no basta.
+1. Seleccionar el MISMO proyecto Supabase staging existente; no crear otro. Anotar su project ref (20 caracteres) desde Project Settings y comprobar la URL del dashboard `/project/<ref>`. El nombre visible no basta.
 2. Anotar por separado el project ref de producción como identificador de exclusión (no es una credencial). Deben ser distintos.
 3. URL de API, publishable key, secret key y conexión SQL deben provenir exclusivamente del staging. Nunca copiar secrets de `.env.local` ni usar la conexión guardada por defecto en una CLI.
 4. Confirmar rama con `git branch --show-current`. Debe imprimir `feat/sales-network-beta`. No push ni deploy durante esta preparación.
@@ -18,7 +20,7 @@ Supabase gestionado debe tener Auth (`auth.users`, `auth.uid()`), Storage (`stor
 
 El schema comercial requiere todas las migraciones **00000–00028 y 00030**: profiles/auth, catálogo, clientes, quotes, variantes, addons, salespeople, quote_items, overrides/cupones y funciones comerciales vigentes. 00030 requiere cinco firmas exactas, incluidas las dos sobrecargas de preview_quote_coupon. 00029 intentó sustituir guards por nombre y falla sobre una sobrecarga; su transacción revierte. 00030 reemplaza las cinco firmas independientemente. **Omitir 00029**, no editarla ni ejecutarla y continuar ignorando errores.
 
-### Staging nuevo y vacío: camino recomendado
+### Mismo staging limpiado: camino recomendado
 
 No clonar usuarios, clientes, comprobantes ni mensajes productivos. Reconstruir desde el repositorio en un proyecto Supabase vacío. Esto replica el schema versionado hasta 00030; no demuestra que producción no tenga drift manual. La equivalencia con producción requiere un inventario/schema-only previamente aprobado y saneado; no se consultó producción en esta entrega.
 
@@ -29,15 +31,15 @@ node scripts/prepare-sales-network-staging.mjs
 Get-Content tmp/sales-network-staging-plan/manifest.json
 ```
 
-El script solo copia SQL local y genera checksums: `baseline.psql` contiene los 29 archivos 00000–00028 y luego 00030 (30 archivos). `network.psql` contiene 00031–00036. Nunca invoca psql ni Supabase.
+El generador emite **baseline-combined.sql** en UTF-8 sin BOM, con guard de schema vacío, identidades documentadas para 00026 y fronteras de transacción para enums. No es concatenación manual. Conserva las definiciones comerciales hasta 00030, omite 00029 y deja Network separado. El manifiesto incluye SHA256 de fuentes y artefactos.
 
-Camilo puede abrir cada archivo del listado `baseline` en SQL Editor del **staging vacío**, uno por uno y en ese orden, deteniéndose al primer error. Alternativa si tiene psql instalado: establecer PGHOST/PGPORT/PGUSER/PGDATABASE desde Connect de staging, introducir contraseña staging mediante `-W`, y ejecutar:
+Camilo debe limpiar el staging existente mediante [reset protegido](sales-network-staging-reset.md), abrir baseline-combined.sql como UTF-8 y ejecutarlo completo en SQL Editor del ref verificado. No ejecutar los archivos históricos individualmente para este bootstrap. Alternativa psql, con PGHOST/PGPORT/PGUSER/PGDATABASE tomados de Connect del staging y contraseña staging mediante -W:
 
 ```powershell
 psql -X -W -v ON_ERROR_STOP=1 -f tmp/sales-network-staging-plan/baseline.psql
 ```
 
-No ejecutar baseline sobre una base que ya tenga tablas comerciales. No usar `supabase db reset` ni `db push` indiscriminado: reintroducen 00029. Los archivos históricos contienen los seeds de catálogo versionados; no se cambian sus valores. No actualizar después precios/catálogo para la demo. Las imágenes históricas pueden requerir assets de staging; no copiar Storage productivo con comprobantes/clientes.
+No envolverlo en otra transacción: el enum expo necesita COMMIT antes de usarse. No ejecutar sobre schema parcial, ni usar db reset/db push indiscriminadamente. Para el staging parcial que falló, usar el [reset protegido del MISMO proyecto](sales-network-staging-reset.md), conservando ref y credenciales staging. No crear otro proyecto ni reejecutar el bootstrap encima del schema parcial. Revisar las queries y los conteos del documento de bootstrap antes de aplicar Network.
 
 ### Staging existente
 

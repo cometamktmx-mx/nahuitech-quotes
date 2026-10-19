@@ -1,6 +1,6 @@
 # Sales Network — checklist de migraciones
 
-Preflight staging actualizado: consultar [runbook exacto](sales-network-staging-runbook.md). Baseline limpio: 00000–00028, omitir 00029, aplicar 00030. Luego 00031–00036. No se necesitó 00037. Scripts locales generan plan/checksums sin conexiones remotas.
+Preflight staging actualizado: consultar [runbook exacto](sales-network-staging-runbook.md). Baseline limpio: usar el [bootstrap consolidado UTF-8](sales-network-staging-bootstrap.md), que incorpora 00000–00028 y 00030, omite 00029 y resuelve identidades de cantidades/fronteras de enums solo para staging vacío. Luego 00031–00036. No se necesitó 00037. Scripts locales generan plan/checksums sin conexiones remotas.
 
 Auditoría local: 18 octubre 2026. No se ejecutó Supabase remoto. Las cinco migraciones 00031–00035 se conservaron; las correcciones de este sprint están en **00036**. No se modificó ninguna migración histórica 00000–00030.
 

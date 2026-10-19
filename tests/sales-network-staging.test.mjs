@@ -12,7 +12,7 @@ test('offline migration plan skips 00029 and emits valid psql meta commands',()=
  const manifest=JSON.parse(readFileSync('tmp/sales-network-staging-plan/manifest.json','utf8'));
  assert.equal(manifest.baseline.length,30);assert.equal(manifest.network.length,6);assert.ok(!manifest.baseline.some(f=>f.includes('00029')));assert.ok(manifest.baseline.at(-1).includes('00030'));
  const plan=readFileSync('tmp/sales-network-staging-plan/baseline.psql','utf8');const slash=String.fromCharCode(92);
- assert.ok(plan.startsWith(slash+'set ON_ERROR_STOP on'));assert.equal(plan.split('\n').filter(l=>l.startsWith(slash+'ir ')).length,30);
+ assert.ok(plan.startsWith(slash+'set ON_ERROR_STOP on'));assert.deepEqual(plan.split('\n').filter(l=>l.startsWith(slash+'ir ')),[slash+'ir baseline-combined.sql']);
 });
 for(const [name,change,args] of [
  ['development',{SALES_NETWORK_ENV:'development'}],['production',{SALES_NETWORK_ENV:'production'}],['missing env',{SALES_NETWORK_ENV:''}],['wrong host',{SALES_NETWORK_DEMO_ALLOW_HOST:'other.supabase.co'}],['production ref',{SALES_NETWORK_PRODUCTION_PROJECT_REF:env.SALES_NETWORK_STAGING_PROJECT_REF}],['missing production ref',{SALES_NETWORK_PRODUCTION_PROJECT_REF:''}],['http',{NEXT_PUBLIC_SUPABASE_URL:'http://abcdefghijklmnopqrst.supabase.co'}],['localhost',{NEXT_PUBLIC_SUPABASE_URL:'http://localhost:54321'}],['missing flag',{},[]],['missing key',{SUPABASE_SECRET_KEY:''}],

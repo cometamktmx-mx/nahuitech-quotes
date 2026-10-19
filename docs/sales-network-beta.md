@@ -1,5 +1,7 @@
 # DEMO DE 7 MINUTOS
 
+**Bootstrap corregido 19 octubre:** regenerar baseline-combined.sql con Node; ver [instrucciones](sales-network-staging-bootstrap.md).
+
 **Actualización staging:** usar el [runbook vigente](sales-network-staging-runbook.md) y el [checklist E2E real](sales-network-e2e-checklist.md). Seed/reset admiten exclusivamente staging con refs distintas y host exacto; no existe `--with-order`. Ninguna validación remota se ha ejecutado.
 
 Preparar staging y seed con las instrucciones de abajo antes de presentar. Tener dos perfiles abiertos y tres comprobantes de muestra válidos. Las URLs son relativas a http://localhost:3000 o al staging que prepare el operador. Sustituir {opportunityId}/{orderId} por los enlaces creados en pantalla. Confirmar los diálogos cuando aparezcan. Los tiempos suman 7 minutos.

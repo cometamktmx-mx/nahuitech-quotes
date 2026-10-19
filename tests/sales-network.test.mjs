@@ -4,6 +4,7 @@ import { randomUUID,createHash } from 'node:crypto';
 import { test } from 'node:test';
 import {resetDemo} from '../scripts/lib/reset-sales-network-demo.mjs';
 import {demoEmails} from '../scripts/lib/sales-network-staging.mjs';
+import {buildStagingBaseline} from '../scripts/lib/staging-baseline.mjs';
 import { PGlite } from '../tmp/sql-validation/node_modules/@electric-sql/pglite/dist/index.js';
 
 test('Sales Network: isolated PostgreSQL integration, RLS and complete order lifecycle',async t=>{
@@ -18,7 +19,8 @@ test('Sales Network: isolated PostgreSQL integration, RLS and complete order lif
  create table storage.objects(id uuid default gen_random_uuid(),bucket_id text,name text);
  alter table storage.objects enable row level security;grant select on storage.objects to authenticated;
  create function storage.foldername(text) returns text[] language sql immutable as $$select string_to_array($1,'/')$$;`);
- for(const file of readdirSync('supabase/migrations').filter(f=>f.endsWith('.sql')&&!f.includes('000029_')&&!f.startsWith('20260922000029')).sort()){
+ await db.exec(buildStagingBaseline().sql);
+ for(const file of readdirSync('supabase/migrations').filter(f=>/^2026101800003[1-6]_.*\.sql$/.test(f)).sort()){
   if(file.startsWith('20261018000031')){
    await db.query("insert into auth.users(id,email) values($1,'existing-admin@example.test'),($2,'inactive-admin@example.test')",[existingAdmin,inactiveAdmin]);
    await db.query("update public.profiles set role='admin',active=(id=$1) where id in ($1,$2)",[existingAdmin,inactiveAdmin]);

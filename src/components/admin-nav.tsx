@@ -37,6 +37,7 @@ export function AdminNav({ active, userName }: AdminNavProps) {
           <Link className={navLinkClass(active === "overview")} href="/admin">
             Control center
           </Link>
+          <Link className={navLinkClass(false)} href="/network">Sales Network</Link>
           <Link className={navLinkClass(active === "catalog")} href="/admin/catalog">
             Catálogo
           </Link>

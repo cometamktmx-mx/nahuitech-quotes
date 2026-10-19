@@ -1,0 +1,1 @@
+export default function Loading(){return <div role="status" className="animate-pulse space-y-5"><div className="h-10 w-64 rounded bg-slate-700"/><div className="grid gap-4 sm:grid-cols-3">{[1,2,3].map(n=><div key={n} className="h-36 rounded-xl bg-slate-800"/>)}</div><p>Cargando Sales Network…</p></div>}

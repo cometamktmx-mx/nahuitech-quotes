@@ -25,6 +25,7 @@ export function SellerShellHeader({
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-4 sm:justify-end">
+          <Link className="text-sm font-bold text-primary" href="/network">Sales Network</Link>
           {accountRole === "admin" ? <Link className="text-sm font-bold text-primary" href="/admin">Admin</Link> : null}
           <SellerOfflineStatus />
           <SellerAttendingControl accountRole={accountRole} userName={userName} />

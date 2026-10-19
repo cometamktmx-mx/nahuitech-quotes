@@ -1,0 +1,10 @@
+import {createClient} from '@supabase/supabase-js';
+import {stagingTarget,readManifest,saveManifest} from './lib/sales-network-staging.mjs';
+import {resetDemo} from './lib/reset-sales-network-demo.mjs';
+const {url,host,ref,secret}=stagingTarget('--allow-demo-reset');
+const m=readManifest(ref);
+if(!m||m.host!==host)throw Error('Matching local seed manifest required. No writes made.');
+const admin=createClient(url,secret,{auth:{persistSession:false,autoRefreshToken:false}});
+const reset=await resetDemo(admin,m);
+saveManifest(ref,{...m,...reset});
+console.log('STAGING ONLY reset complete. Catalog, quotes/customers, users, memberships and devices retained. Run seed again.');

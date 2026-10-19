@@ -1,0 +1,5 @@
+import { date } from "@/lib/network/display";
+import { ActionForm } from "./action-form";
+import { revokeDeviceAction } from "@/app/network/actions";
+export type DeviceRow={id:string;organization_name:string;user_name:string;device_name:string|null;last_seen_at:string;revoked_at:string|null};
+export function DeviceList({devices}:{devices:DeviceRow[]}){return <div className="net-grid">{devices.map(d=><article className="net-card space-y-4" key={d.id}><h2>{d.device_name||"Dispositivo de ventas"}</h2><p>{d.organization_name} · {d.user_name}</p><p className="net-muted">Última actividad: {date(d.last_seen_at)}</p>{d.revoked_at?<span className="net-chip">Revocado</span>:<ActionForm action={revokeDeviceAction} label="Revocar dispositivo" confirm="¿Revocar este dispositivo? Perderá acceso a Sales Network." secondary><input type="hidden" name="id" value={d.id}/><p className="net-muted text-xs">La revocación bloquea el acceso de este dispositivo a Sales Network.</p></ActionForm>}</article>)}{!devices.length&&<p className="net-card net-muted">No hay dispositivos registrados.</p>}</div>}

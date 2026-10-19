@@ -1,0 +1,2 @@
+"use client";
+export default function ErrorPage({reset}:{reset:()=>void}){return <main className="min-h-screen bg-slate-950 p-10 text-white"><h1 className="text-2xl">Sales Network no está disponible</h1><p className="my-4">Comprueba tu conexión y que las migraciones de Sales Network estén instaladas. El cotizador sigue disponible.</p><button onClick={reset} className="mr-6 rounded border p-3">Reintentar</button><a href="/seller">Abrir cotizador</a></main>}

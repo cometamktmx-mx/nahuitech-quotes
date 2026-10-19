@@ -1,0 +1,3 @@
+import { requireNetwork } from "@/lib/network/server";
+import { OrderList } from "@/components/network/orders";
+export default async function Orders(){const {db,org}=await requireNetwork();const {data,error}=await db.from("orders").select("id,folio,status,dealer_order_total,customer_quote_total_snapshot,estimated_completion_date").eq("organization_id",org).order("created_at",{ascending:false}).limit(100);if(error)throw new Error(error.message);return <><div><p className="net-muted">SELL-IN · NAHUITECH → DISTRIBUIDOR</p><h1>Pedidos a Nahuitech</h1><p className="net-muted">El monto del pedido lo define HQ, separado del precio al cliente.</p></div><OrderList orders={data??[]}/></>}

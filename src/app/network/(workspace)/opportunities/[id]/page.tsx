@@ -1,0 +1,42 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { requireNetwork } from "@/lib/network/server";
+import { labels,money,stages,date,dateTime } from "@/lib/network/display";
+import { ActionForm } from "@/components/network/action-form";
+import { TaskList } from "@/components/network/tasks";
+import { PageHeading,StatusChip,SectionHeading,EmptyState } from "@/components/network/ui";
+import { opportunityAction,createOrderAction } from "../../../actions";
+
+export default async function Opportunity({params}:{params:Promise<{id:string}>}) {
+ const {id}=await params;
+ const {db,org,user,owner}=await requireNetwork();
+ let opportunityQuery=db.from("opportunities").select("*").eq("id",id);
+ if(!owner)opportunityQuery=opportunityQuery.eq("organization_id",org);
+ const {data:o,error}=await opportunityQuery.maybeSingle();
+ if(error)throw new Error("No se pudo cargar la oportunidad");if(!o)notFound();
+ const [activities,quotes,tasks,order,salesperson]=await Promise.all([
+  db.from("opportunity_activities").select("id,activity_type,body,created_at").eq("opportunity_id",id).order("created_at",{ascending:false}).limit(100),
+  db.from("quotes").select("id,folio,total,created_at").eq("seller_id",user.id).neq("status","CANCELLED").order("created_at",{ascending:false}).limit(100),
+  db.from("sales_tasks").select("*").eq("opportunity_id",id).in("status",["OPEN","IN_PROGRESS"]).order("priority_rank").order("due_at").limit(50),
+  db.from("orders").select("id,folio").eq("opportunity_id",id).maybeSingle(),
+  o.salesperson_id?db.from("salespeople").select("full_name").eq("id",o.salesperson_id).maybeSingle():Promise.resolve({data:null,error:null}),
+ ]);
+ if(activities.error||quotes.error||tasks.error||order.error||salesperson.error)throw new Error("No se pudo cargar el seguimiento completo");
+ const snapshot=o.quote_snapshot;const closed=["WON","LOST"].includes(o.stage);
+ const common=(action:string)=><><input type="hidden" name="action" value={action}/><input type="hidden" name="id" value={id}/></>;
+ return <>
+  <Link href="/network/opportunities" className="net-muted text-xs">← Todas las oportunidades</Link>
+  <PageHeading eyebrow="Sell-out · distribuidor → cliente final" title={o.title} action={order.data?<Link className="net-button net-primary" href={`/network/orders/${order.data.id}`}>Ver pedido {order.data.folio}</Link>:o.stage==="WON"?<ActionForm action={createOrderAction} label="Convertir en pedido" confirm="¿Enviar esta venta a revisión de Nahuitech? HQ definirá el precio dealer."><input type="hidden" name="opportunity_id" value={id}/></ActionForm>:<StatusChip value={o.stage}/>}/>
+  <section className="net-card"><dl className="net-facts"><div><dt>Cliente final</dt><dd>{o.customer_name_snapshot||"Por vincular"}</dd></div><div><dt>Etapa</dt><dd><StatusChip value={o.stage}/></dd></div><div><dt>Valor sell-out</dt><dd>{o.estimated_value===null?"Por definir":money(o.estimated_value)}</dd></div><div><dt>Vendedor</dt><dd>{snapshot?.quote?.salesperson_name_snapshot||salesperson.data?.full_name||"Sin asignar"}</dd></div><div><dt>Próxima acción</dt><dd>{dateTime(o.next_action_at)}</dd></div></dl></section>
+  <div className="net-detail-grid">
+   <section className="net-card net-quote" id="quote">
+    <SectionHeading title={o.linked_quote_id?"Cotización vinculada":"Cotización comercial"} description="El importe sell-out conserva el cálculo comercial original."/>
+    {o.linked_quote_id?<><dl className="net-facts"><div><dt>Folio</dt><dd>{snapshot?.quote?.folio}</dd></div><div><dt>Cliente</dt><dd>{snapshot?.customer?.name||o.customer_name_snapshot||"Cliente vinculado"}</dd></div><div><dt>Fecha</dt><dd>{date(snapshot?.quote?.created_at)}</dd></div><div><dt>Importe sell-out</dt><dd>{money(snapshot?.quote?.total)}</dd></div><div><dt>Vendedor</dt><dd>{snapshot?.quote?.salesperson_name_snapshot||"Sin vendedor en snapshot"}</dd></div></dl><div className="net-divider"><p>{snapshot?.quote?.machine_name_snapshot}</p>{snapshot?.quote?.seller_id===user.id?<Link className="net-button mt-4" href={`/seller/quotes/${o.linked_quote_id}`}>Ver cotización</Link>:<p className="net-muted text-xs">Snapshot compartido con tu organización. El documento original conserva los permisos de su creador.</p>}</div></>:<><p className="net-muted mb-4">Crea la cotización en el cotizador actual y regresa aquí para vincularla.</p><Link className="net-button mb-5" href="/seller" target="_blank" rel="noreferrer">Crear cotización ↗</Link><ActionForm action={opportunityAction} label="Vincular cotización" confirm="¿Vincular esta cotización a la oportunidad? No se recalculará ningún precio.">{common("link_quote")}<label>Cotización propia<select name="quote_id" required><option value="">Seleccionar folio</option>{quotes.data?.map(q=><option key={q.id} value={q.id}>{q.folio} · {money(q.total)} · {date(q.created_at)}</option>)}</select></label></ActionForm></>}
+   </section>
+   <section className="net-card" id="stage"><SectionHeading title="Acciones comerciales" description={closed?"Esta oportunidad está cerrada. El historial queda preservado.":"Actualiza el avance después de registrar el contacto."}/>{closed?<><StatusChip value={o.stage}/>{o.lost_reason&&<p className="mt-4">{labels[o.lost_reason]} {o.lost_notes&&`· ${o.lost_notes}`}</p>}</>:<ActionForm action={opportunityAction} label="Actualizar etapa" confirm="¿Confirmar el cambio de etapa? Ganada y Perdida cierran la oportunidad.">{common("stage")}<label>Etapa<select name="stage" defaultValue={o.stage}>{stages.map(s=><option key={s} value={s} disabled={(s==="WON"||s==="QUOTED")&&!o.linked_quote_id}>{labels[s]}</option>)}</select></label><label>Motivo si se pierde<select name="lost_reason" defaultValue=""><option value="">Seleccionar motivo</option>{["PRICE","FINANCING","COMPETITOR","DELIVERY_TIME","NO_RESPONSE","PROJECT_CANCELLED","OTHER"].map(s=><option key={s} value={s}>{labels[s]}</option>)}</select></label><label>Detalle de pérdida · obligatorio para Otro<textarea name="lost_notes" maxLength={4000}/></label></ActionForm>}</section>
+  </div>
+  <section id="follow-up" className="net-card"><SectionHeading title="Registrar seguimiento" description="Registrar una llamada, correo o WhatsApp no envía mensajes automáticamente."/><ActionForm action={opportunityAction} label="Guardar seguimiento">{common("activity")}<div className="net-grid"><label>Tipo de actividad<select name="activity_type"><option value="NOTE">Nota</option><option value="CALL">Llamada</option><option value="WHATSAPP">WhatsApp registrado</option><option value="EMAIL">Correo registrado</option></select></label><label>Reprogramar próxima acción<input name="next_action_at" type="datetime-local"/><span className="net-muted">Vacío conserva la fecha actual. Se usa la zona horaria de tu dispositivo.</span></label></div><label>Detalle<textarea name="body" required maxLength={4000}/></label><label><input type="checkbox" name="clear_next_action"/>Quitar próxima acción</label></ActionForm></section>
+  <section><SectionHeading title="Tareas de la oportunidad"/><TaskList tasks={tasks.data??[]}/></section>
+  <section className="net-card"><SectionHeading title="Actividad comercial"/>{activities.data?.length?<ol className="net-audit">{activities.data.map(a=><li key={a.id}><p className="net-muted text-xs">{dateTime(a.created_at)} · {labels[a.activity_type]??a.activity_type}</p><p className="net-activity-body mt-1">{a.body}</p></li>)}</ol>:<EmptyState title="El seguimiento empieza aquí" body="Registra el primer contacto para construir el historial."/>}</section>
+ </>;
+}

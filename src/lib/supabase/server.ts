@@ -17,6 +17,7 @@ export async function createClient() {
     supabaseUrl,
     supabasePublishableKey,
     {
+      global: {headers:{"x-network-org":cookieStore.get("network_org")?.value??"","x-network-device":cookieStore.get("network_device")?.value??""}},
       cookies: {
         getAll() {
           return cookieStore.getAll();

@@ -1,5 +1,6 @@
 "use server";
 
+import { quoteBranding } from "@/lib/network/quote-branding";
 import { revalidatePath } from "next/cache";
 
 import { getSellerClient } from "@/lib/auth/get-seller-client";
@@ -340,7 +341,7 @@ async function loadCreatedQuotePdfSnapshot(
   const { data: quote, error: quoteError } = await supabase
     .from("quotes")
     .select(
-      "folio, customer_id, salesperson_name_snapshot, machine_name_snapshot, machine_base_price_snapshot, machine_number_of_bases_snapshot, machine_image_url_snapshot, machine_variant_type_snapshot, machine_variant_name_snapshot, machine_variant_price_snapshot, machine_variant_description_snapshot, delivery_type, delivery_note, subtotal, subtotal_before_tax_snapshot, tax_rate_snapshot, tax_amount_snapshot, discount_amount, coupon_code_snapshot, coupon_name_snapshot, coupon_discount_type_snapshot, coupon_discount_value_snapshot, notes, total, created_at"
+      "folio, customer_id, organization_branding_snapshot, salesperson_phone_snapshot, salesperson_email_snapshot, salesperson_name_snapshot, machine_name_snapshot, machine_base_price_snapshot, machine_number_of_bases_snapshot, machine_image_url_snapshot, machine_variant_type_snapshot, machine_variant_name_snapshot, machine_variant_price_snapshot, machine_variant_description_snapshot, delivery_type, delivery_note, subtotal, subtotal_before_tax_snapshot, tax_rate_snapshot, tax_amount_snapshot, discount_amount, coupon_code_snapshot, coupon_name_snapshot, coupon_discount_type_snapshot, coupon_discount_value_snapshot, notes, total, created_at"
     )
     .eq("id", quoteId)
     .maybeSingle();
@@ -381,6 +382,7 @@ async function loadCreatedQuotePdfSnapshot(
     createdAt: quote.created_at,
     customer: customerResult.data,
     sellerName: quote.salesperson_name_snapshot ?? null,
+    dealerBranding: quoteBranding(quote),
     machine: {
       name: quote.machine_name_snapshot,
       basePrice: asNumber(quote.machine_base_price_snapshot),

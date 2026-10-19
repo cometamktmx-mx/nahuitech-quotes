@@ -17,7 +17,7 @@ test('real seed script twice on local PostgreSQL leaves ETM unactivated and comm
  alter table storage.objects enable row level security;grant select on storage.objects to authenticated;
  create function storage.foldername(text) returns text[] language sql immutable as $$select string_to_array($1,'/')$$;`);
  await db.exec(buildStagingBaseline().sql);
- for(const f of readdirSync('supabase/migrations').filter(f=>/^2026101800003[1-6]_/.test(f)).sort())await db.exec(readFileSync('supabase/migrations/'+f,'utf8'));
+ for(const f of readdirSync('supabase/migrations').filter(f=>f>='20261018000031'&&f.endsWith('.sql')).sort())await db.exec(readFileSync('supabase/migrations/'+f,'utf8'));
  const query=async(s,args=[]) => (await db.query(s,args)).rows;
  const scalar=async(s,args=[])=>Object.values((await query(s,args))[0])[0];
  const users=new Map();let manifest=null;const calls=[];

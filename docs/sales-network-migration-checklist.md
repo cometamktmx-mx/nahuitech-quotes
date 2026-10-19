@@ -1,5 +1,7 @@
 # Sales Network — checklist de migraciones
 
+**Actualización local 19/10/2026:** esta guía conserva el recorrido de la Beta anterior. La versión actual requiere además las migraciones aditivas 00037 → 00041; consultar [Transaction Core y posventa](sales-network-transaction-core.md) para alcance, orden, validaciones y pendientes. No reejecutar el baseline ni resetear el staging existente.
+
 Preflight staging actualizado: consultar [runbook exacto](sales-network-staging-runbook.md). Baseline limpio: usar el [bootstrap consolidado UTF-8](sales-network-staging-bootstrap.md), que incorpora 00000–00028 y 00030, omite 00029 y resuelve identidades de cantidades/fronteras de enums solo para staging vacío. Luego 00031–00036. No se necesitó 00037. Scripts locales generan plan/checksums sin conexiones remotas.
 
 Auditoría local: 18 octubre 2026. No se ejecutó Supabase remoto. Las cinco migraciones 00031–00035 se conservaron; las correcciones de este sprint están en **00036**. No se modificó ninguna migración histórica 00000–00030.

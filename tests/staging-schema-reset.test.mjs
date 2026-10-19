@@ -55,6 +55,8 @@ test('staging reset: partial bootstrap, repeat baseline + Network, guards, atomi
    await refused(reset.sql,/expired/); // one-use marker
    await db.exec(buildStagingBaseline().sql);
    await db.exec(readFileSync('tmp/sales-network-staging-plan/network-combined.sql','utf8'));
+   await db.exec(readFileSync('tmp/sales-network-staging-plan/transaction-core-combined.sql','utf8'));
+   await db.exec(readFileSync('tmp/sales-network-staging-plan/post-sale-combined.sql','utf8'));
    assert.equal((await db.query('select count(*) from public.organizations')).rows[0].count,4);
    assert.equal((await db.query('select count(*) from public.machines where active')).rows[0].count,10);
   });

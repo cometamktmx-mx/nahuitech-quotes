@@ -17,6 +17,7 @@ export type QuotePdfCoupon = {
 };
 
 export type QuotePdfSnapshot = {
+  dealerBranding?: {name:string;logoUrl:string|null;label:string;footer:string|null;sellerPhone:string|null;sellerEmail:string|null};
   items?: QuotePdfItem[];
   folio: string;
   createdAt: string;

@@ -27,6 +27,8 @@ for(const [kind,email] of Object.entries(emails)){
 }
 let salesperson=unwrap(await admin.from('salespeople').select('id').eq('email',emails.dealer)).at(0)?.id;
 if(!salesperson)salesperson=unwrap(await admin.from('salespeople').insert({full_name:'Vendedor DEMO ETM',email:emails.dealer}).select('id').single()).id;
+unwrap(await admin.from('organizations').update({display_name:'ETM',authorized_distributor_label:'Distribuidor autorizado de Nahuitech',primary_color:'#16b8c5',finance_contact_name:'Finanzas ETM Demo',finance_email:'finance-demo@example.invalid',logistics_contact_name:'Logística ETM Demo',logistics_email:'logistics-demo@example.invalid'}).eq('id',etm));
+unwrap(await admin.from('salespeople').update({organization_id:etm,phone:'5555555555',whatsapp:'525555555555',job_title:'Asesor comercial'}).eq('id',salesperson));
 unwrap(await admin.from('profiles').update({role:'admin',active:true}).eq('id',users.hq));
 unwrap(await admin.from('profiles').update({role:'seller',active:true,salesperson_id:salesperson}).eq('id',users.dealer));
 unwrap(await admin.from('organization_memberships').upsert({organization_id:hq,user_id:users.hq,network_role:'NETWORK_OWNER',active:true},{onConflict:'organization_id,user_id'}));

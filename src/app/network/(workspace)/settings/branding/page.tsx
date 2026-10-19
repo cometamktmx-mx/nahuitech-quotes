@@ -1,0 +1,11 @@
+import {requireNetwork} from '@/lib/network/server';
+import {ActionForm} from '@/components/network/action-form';
+import {PageHeading} from '@/components/network/ui';
+import {brandingAction} from '@/app/network/settings-actions';
+export default async function Branding({searchParams}:{searchParams:Promise<{organization?:string}>}){
+ const {db,org}=await requireNetwork();const target=(await searchParams).organization||org;
+ const {data:allowed}=await db.rpc('network_manage_organization',{p_org:target});if(!allowed)return <p className="net-card">Se requiere administrador de la organización.</p>;
+ const {data:g,error}=await db.from('organizations').select('*').eq('id',target).single();if(error)throw Error('No se pudo cargar la identidad');
+ const fields=[['display_name','Nombre comercial'],['legal_name','Razón social'],['primary_color','Color principal'],['secondary_color','Color secundario'],['accent_color','Color acento'],['commercial_phone','Teléfono comercial'],['commercial_whatsapp','WhatsApp comercial'],['commercial_email','Email comercial'],['website','Sitio HTTPS'],['favicon_url','Favicon HTTPS'],['finance_contact_name','Contacto finanzas'],['finance_phone','Teléfono finanzas'],['finance_email','Email finanzas'],['logistics_contact_name','Contacto logística'],['logistics_phone','Teléfono logística'],['logistics_email','Email logística'],['address','Dirección'],['tax_id','RFC'],['authorized_distributor_label','Texto de distribuidor autorizado'],['quote_footer_text','Texto comercial para nuevas cotizaciones']];
+ return <><PageHeading eyebrow={g.name} title="Identidad y contactos" description="Los cambios se usan en nuevas operaciones; los snapshots anteriores se conservan."/><section className="net-card"><ActionForm action={brandingAction} label="Guardar identidad"><input type="hidden" name="organization_id" value={target}/><label>Logo PNG/JPG/WebP · hasta 2 MB<input type="file" name="logo" accept="image/png,image/jpeg,image/webp"/></label><div className="net-grid">{fields.map(([key,label])=><label key={key}>{label}<input name={key} defaultValue={g[key]??''} maxLength={key==='quote_footer_text'?2000:300} type={key.endsWith('_color')?'color':key.endsWith('_email')?'email':'text'}/></label>)}</div></ActionForm></section></>;
+}

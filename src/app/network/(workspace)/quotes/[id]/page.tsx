@@ -1,0 +1,10 @@
+import Link from 'next/link';
+import {requireNetwork} from '@/lib/network/server';
+import {PageHeading,SectionHeading} from '@/components/network/ui';
+import {money,dateTime,labels} from '@/lib/network/display';
+export default async function Quote({params}:{params:Promise<{id:string}>}){
+ const {id}=await params;const {db,owner}=await requireNetwork();const {data,error}=await db.rpc('network_quote_detail',{p_quote:id});
+ if(error||!data)return <p className="net-card">Cotización no disponible para tu organización.</p>;
+ const q=data.quote;
+ return <><PageHeading eyebrow="Cotización · SELL-OUT" title={q.folio}/><section className="net-card"><dl className="net-facts">{[['Cliente',data.customer?.name],['Dealer',q.organization_name_snapshot||data.organization],['Sucursal',q.branch_name_snapshot||'Sin sucursal'],['Vendedor',q.salesperson_name_snapshot],['Teléfono',q.salesperson_phone_snapshot||'No registrado'],['Email',q.salesperson_email_snapshot||'No registrado'],['Fecha',dateTime(q.created_at)],['Importe SELL-OUT',money(q.total)],['Estado',labels[data.stage]||data.stage||q.status]].map(([k,v])=><div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl></section><section className="net-card"><SectionHeading title="Equipos"/>{data.items?.length?data.items.map((i:{id:string;quantity:number;machine_name_snapshot:string;machine_variant_name_snapshot:string})=><p key={i.id}>{i.quantity} × {i.machine_name_snapshot} · {i.machine_variant_name_snapshot}</p>):<p>{q.machine_name_snapshot} · {q.machine_variant_name_snapshot}</p>}</section><div className="flex flex-wrap gap-3">{data.opportunity_id&&<Link className="net-button" href={`/network/opportunities/${data.opportunity_id}`}>Ver oportunidad</Link>}{owner&&<Link className="net-button" href={`/network/hq/dealers/${data.organization_id}`}>Ver dealer</Link>}{owner&&q.salesperson_id&&<Link className="net-button" href={`/network/settings/team?organization=${data.organization_id}#${q.salesperson_id}`}>Ver vendedor</Link>}{data.order_id&&<Link className="net-button" href={`/network/orders/${data.order_id}`}>Ver pedido</Link>}</div></>;
+}

@@ -1,5 +1,7 @@
 # Sales Network — staging real para Camilo
 
+**Actualización local 19/10/2026:** esta guía conserva el recorrido de la Beta anterior. La versión actual requiere además las migraciones aditivas 00037 → 00041; consultar [Transaction Core y posventa](sales-network-transaction-core.md) para alcance, orden, validaciones y pendientes. No reejecutar el baseline ni resetear el staging existente.
+
 **Corrección 19 octubre:** el baseline combinado anterior quedó corrupto por codificación. Regenerar con Node y usar exclusivamente el bootstrap consolidado nuevo; no concatenar archivos en PowerShell. Ver [investigación, corrección y recuperación del staging parcial](sales-network-staging-bootstrap.md).
 
 Estado de entrega: preparación local; **ninguna conexión, migración, seed, reset o deployment remoto ejecutado**. No se puede certificar el estado de un staging que aún no se inspeccionó. Features congeladas. Rama local: `feat/sales-network-beta`. No usar main para esta demo.

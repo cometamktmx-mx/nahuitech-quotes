@@ -804,6 +804,22 @@ export async function generateQuotePdf(
   };
 
   addHeader(context, snapshot);
+  if(snapshot.dealerBranding){
+    const brand=snapshot.dealerBranding;
+    if(brand.logoUrl){
+      try{
+        const url=new URL(brand.logoUrl);const base=process.env.NEXT_PUBLIC_SUPABASE_URL;
+        if(base&&url.origin===new URL(base).origin&&url.pathname.startsWith('/storage/v1/object/public/network-branding/')){
+          const response=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(5000)});
+          if(response.ok){const bytes=await response.arrayBuffer();if(bytes.byteLength<=2*1024*1024){const dealerLogo=await document.embedPng(bytes);const size=dealerLogo.scaleToFit(150,45);ensureSpace(context,snapshot,60);context.page.drawImage(dealerLogo,{x:margin,y:context.cursorY-size.height,width:size.width,height:size.height});context.cursorY-=size.height+10;}}
+        }
+      }catch{/* Branding text remains available if the versioned logo cannot be loaded. */}
+    }
+    drawTextBlock(context,snapshot,brand.name,{size:12,gapAfter:4});
+    drawTextBlock(context,snapshot,brand.label,{size:8,gapAfter:8});
+    const contact=[brand.sellerPhone,brand.sellerEmail].filter(Boolean).join(' | ');
+    if(contact)drawTextBlock(context,snapshot,`Asesor: ${snapshot.sellerName??''} | ${contact}`,{size:8,gapAfter:8});
+  }
   drawClientAndAdvisor(context, snapshot);
   for (const [index, item] of snapshotItems(snapshot).entries()) {
     const bytes = options.itemImageBytes?.[index] ?? (index === 0 && options.machineImageBytes ? options.machineImageBytes : await loadMachineImageBytes(item.machine.imageUrl));
@@ -819,6 +835,7 @@ export async function generateQuotePdf(
   drawPromotionAndFinancialSummary(context, snapshot);
   drawCommercialInfo(context, snapshot);
   drawCommercialConditions(context, snapshot);
+  if(snapshot.dealerBranding?.footer)drawTextBlock(context,snapshot,snapshot.dealerBranding.footer,{size:8,gapAfter:5});
 
   const pages = document.getPages();
   pages.forEach((page, index) => {

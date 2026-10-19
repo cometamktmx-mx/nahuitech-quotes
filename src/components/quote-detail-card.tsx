@@ -80,6 +80,7 @@ export function QuoteDetailCard({
   backHref,
   backLabel,
   sellerName,
+  dealerBranding,
   whatsapp,
 }: {
   items?: import("@/lib/pdf/quote-pdf-types").QuotePdfItem[];
@@ -89,6 +90,7 @@ export function QuoteDetailCard({
   backHref: string;
   backLabel: string;
   sellerName?: string;
+  dealerBranding?: QuotePdfSnapshot['dealerBranding'];
   whatsapp?: {
     quoteId: string;
     status: "PENDING" | "SENDING" | "SENT" | "DELIVERED" | "READ" | "FAILED" | "MANUAL_SENT" | null;
@@ -113,6 +115,7 @@ export function QuoteDetailCard({
     : historicTax;
 
   const pdfSnapshot: QuotePdfSnapshot = {
+    dealerBranding,
     items,
     folio: quote.folio,
     createdAt: quote.createdAt,

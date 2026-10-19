@@ -4,9 +4,11 @@ export async function resetDemo(admin,m){
  for(const kind of ['hq','dealer'])assertDemoUser(unwrap(await admin.auth.admin.getUserById(m.users[kind])).user,kind);
  const org=unwrap(await admin.from('organizations').select('id,slug').eq('id',m.organization_id).single());
  if(org?.slug!=='etm')throw Error('Manifest must refer to ETM.');
- const list=async(table,column,ids)=>{
+ const list=async(table,column,ids,optional=false)=>{
   if(!ids.length)return [];
-  const rows=unwrap(await admin.from(table).select('*').in(column,ids).limit(1000));
+  const result=await admin.from(table).select('*').in(column,ids).limit(1000);
+  if(optional&&['42P01','PGRST205'].includes(result.error?.code))return [];
+  const rows=unwrap(result);
   if(rows.length>=1000)throw Error('Demo reset safety limit reached; no deletion started.');return rows;
  };
  const opps=await list('opportunities','id',m.opportunities);
@@ -19,6 +21,18 @@ export async function resetDemo(admin,m){
  if(docs.some(d=>d.organization_id!==org.id||!Object.values(m.users).includes(d.uploaded_by_user_id)||!d.storage_path.startsWith(`${org.id}/${d.order_id}/`)||d.storage_path.includes('..')))throw Error('Document ownership/path mismatch.');
  const activities=await list('opportunity_activities','opportunity_id',m.opportunities);
  if(activities.some(a=>!Object.values(m.users).includes(a.created_by_user_id)))throw Error('Non-demo actor contributed activity; reset refused.');
+ // Optional additive post-sale tables: retain compatibility with the original Beta.
+ // Refuse to cascade into work performed by ordinary users or follow-up opportunities.
+ const optionalList=async(table,column,values)=>{
+  try{return await list(table,column,values,true);}catch(error){if(['42P01','PGRST205'].includes(error?.code))return [];throw error;}
+ };
+ const changes=await optionalList('order_change_requests','order_id',ids);
+ if(changes.some(r=>!Object.values(m.users).includes(r.requested_by)||(r.approved_by&&!Object.values(m.users).includes(r.approved_by))))throw Error('Non-demo change request actor; reset refused.');
+ const events=await optionalList('order_events','order_id',ids);
+ if(events.some(e=>e.actor_user_id&&!Object.values(m.users).includes(e.actor_user_id)))throw Error('Non-demo order event actor; reset refused.');
+ const units=await optionalList('installed_units','order_id',ids);
+ const related=await list('opportunities','installed_unit_id',units.map(u=>u.id));
+ if(related.some(o=>!m.opportunities.includes(o.id)))throw Error('Installed unit has follow-up opportunities outside demo manifest; reset refused.');
  const goals=await list('sales_goals','id',m.goals??[]),news=await list('network_announcements','id',m.announcements??[]);
  if(goals.some(g=>g.organization_id!==org.id||g.user_id||g.salesperson_id||Number(g.target_amount)!==300000)||news.some(n=>n.organization_id!==org.id||n.created_by_user_id!==m.users.hq||n.title!=='Nuevo lanzamiento Nahuitech'))throw Error('Demo goal/announcement no longer matches manifest.');
  // All ownership checks precede the first deletion. REST steps are retryable, not atomic.

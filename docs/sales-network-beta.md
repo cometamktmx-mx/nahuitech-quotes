@@ -1,5 +1,7 @@
 # DEMO DE 7 MINUTOS
 
+**Actualización local 19/10/2026:** esta guía conserva el recorrido de la Beta anterior. La versión actual requiere además las migraciones aditivas 00037 → 00041; consultar [Transaction Core y posventa](sales-network-transaction-core.md) para alcance, orden, validaciones y pendientes. No reejecutar el baseline ni resetear el staging existente.
+
 **Hotfix de entrada HQ/ETM:** HQ entra automáticamente sin código; ETM debe comenzar sin membership. Para repetir solo el onboarding, usar [reset de activación ETM](sales-network-demo-entry-hotfix.md).
 
 **Bootstrap corregido 19 octubre:** regenerar baseline-combined.sql con Node; ver [instrucciones](sales-network-staging-bootstrap.md).

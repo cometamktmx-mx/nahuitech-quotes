@@ -1,3 +1,4 @@
+import { quoteBranding } from "@/lib/network/quote-branding";
 import { loadQuoteItems } from "@/lib/quotes/load-items";
 import { notFound } from "next/navigation";
 
@@ -28,7 +29,7 @@ export default async function SellerQuoteDetailPage({
   const { data: quote, error: quoteError } = await supabase
     .from("quotes")
     .select(
-      "folio, customer_id, salesperson_name_snapshot, status, machine_name_snapshot, machine_base_price_snapshot, machine_number_of_bases_snapshot, machine_image_url_snapshot, machine_variant_type_snapshot, machine_variant_name_snapshot, machine_variant_price_snapshot, machine_variant_description_snapshot, delivery_type, delivery_note, subtotal, subtotal_before_tax_snapshot, tax_rate_snapshot, tax_amount_snapshot, discount_amount, coupon_code_snapshot, coupon_name_snapshot, coupon_discount_type_snapshot, coupon_discount_value_snapshot, notes, total, created_at"
+      "folio, customer_id, organization_branding_snapshot, salesperson_phone_snapshot, salesperson_email_snapshot, salesperson_name_snapshot, status, machine_name_snapshot, machine_base_price_snapshot, machine_number_of_bases_snapshot, machine_image_url_snapshot, machine_variant_type_snapshot, machine_variant_name_snapshot, machine_variant_price_snapshot, machine_variant_description_snapshot, delivery_type, delivery_note, subtotal, subtotal_before_tax_snapshot, tax_rate_snapshot, tax_amount_snapshot, discount_amount, coupon_code_snapshot, coupon_name_snapshot, coupon_discount_type_snapshot, coupon_discount_value_snapshot, notes, total, created_at"
     )
     .eq("id", quoteId)
     .maybeSingle();
@@ -120,6 +121,7 @@ export default async function SellerQuoteDetailPage({
           taxAmount: quote.tax_amount_snapshot === null ? null : asCatalogNumber(quote.tax_amount_snapshot),
         }}
         sellerName={quote.salesperson_name_snapshot ?? "Vendedor"}
+        dealerBranding={quoteBranding(quote)}
         whatsapp={{
           quoteId,
           status: whatsappMessage?.status ?? null,

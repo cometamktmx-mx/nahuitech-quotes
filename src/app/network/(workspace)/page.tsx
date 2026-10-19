@@ -11,7 +11,7 @@ export default async function NetworkHome(){
  if(owner&&organization?.organization_type==="MANUFACTURER")redirect("/network/hq");
  await refreshSalesNetworkTasks(db,org);
  const [metrics,tasks,insights,activity,news]=await Promise.all([
-  db.rpc("network_dashboard",{p_org:org}),db.from("sales_tasks").select("*").eq("organization_id",org).in("status",["OPEN","IN_PROGRESS"]).order("priority_rank").order("due_at").limit(8),
+  db.rpc("network_dashboard",{p_org:org}),db.from("sales_tasks").select("*").or(`audience_organization_id.eq.${org},and(audience_organization_id.is.null,organization_id.eq.${org})`).in("status",["OPEN","IN_PROGRESS"]).order("priority_rank").order("due_at").limit(8),
   db.rpc("network_insights",{p_org:org}),db.from("network_audit_log").select("id,action,entity_type,entity_id,created_at").eq("organization_id",org).order("created_at",{ascending:false}).limit(6),
   db.from("network_announcements").select("id,title,announcement_type").or(`organization_id.is.null,organization_id.eq.${org}`).in("audience",owner?["ALL","HQ","DEALERS"]:["ALL","DEALERS"]).lte("published_at",new Date().toISOString()).or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`).order("published_at",{ascending:false}).limit(3),
  ]);

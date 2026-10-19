@@ -34,7 +34,7 @@ export async function uploadDocumentAction(_state:ActionResult,form:FormData):Pr
  const {error:uploadError}=await admin.storage.from("sales-network-documents").upload(path,bytes,{contentType:mime,upsert:false});
  networkLog("document_upload",!uploadError,started);
  if(uploadError)return {error:"No se pudo guardar el archivo privado. Comprueba la configuración de Storage."};
- const {error}=await db.rpc("network_attach_document",{p_order:order.id,p_type:String(form.get("document_type")),p_path:path,p_name:file.name.replace(/[\x00-\x1f]/g,"").slice(0,250),p_mime:mime,p_size:file.size});
+ const {error}=await db.rpc("network_submit_document",{p_order:order.id,p_type:String(form.get("document_type")),p_path:path,p_name:file.name.replace(/[\x00-\x1f]/g,"").slice(0,250),p_mime:mime,p_size:file.size,p_amount:String(form.get("submitted_amount")??""),p_reference:String(form.get("reference")??"")});
  if(["DEPOSIT_PROOF","BALANCE_PROOF"].includes(String(form.get("document_type"))))networkLog("payment_submit",!error,started);
  if(error){await admin.storage.from("sales-network-documents").remove([path]);return {error:networkError(error)};}
  revalidatePath("/network","layout");return {success:"Documento privado guardado y enviado a revisión cuando corresponde."};

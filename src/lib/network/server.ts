@@ -7,7 +7,7 @@ import { cache } from "react";
 export async function networkClient() {
   const jar = await cookies();
   return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, {
-    global: { headers: { "x-network-device": jar.get("network_device")?.value ?? "" } },
+    global: { headers: { "x-network-device": jar.get("network_device")?.value ?? "", "x-network-org":jar.get("network_org")?.value??"" } },
     cookies: { getAll: () => jar.getAll(), setAll(values) { try { values.forEach(({name,value,options}) => jar.set(name,value,options)); } catch {} } },
   });
 }
@@ -38,6 +38,6 @@ export const requireNetwork = cache(async (hq = false) => {
   await session.db.rpc("network_touch_device");
   const {data: owner} = await session.db.rpc("is_network_owner");
   if (hq && !owner) redirect("/network");
-  const {data: organization} = await session.db.from("organizations").select("id,name,display_name,primary_color,logo_url,organization_type").eq("id",org).single();
+  const {data: organization} = await session.db.from("organizations").select("id,name,display_name,primary_color,secondary_color,accent_color,logo_url,organization_type,authorized_distributor_label").eq("id",org).single();
   return {...session,org,owner:Boolean(owner),organization};
 });

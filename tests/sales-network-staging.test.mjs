@@ -34,6 +34,13 @@ function fixture(change={}){
 test('reset refuses cross-org order before deleting anything',async()=>{const {admin,m,writes}=fixture({orders:[{id:'order',opportunity_id:'opp',organization_id:'sisco',created_by_user_id:'dealer'}]});await assert.rejects(resetDemo(admin,m),/ownership/);assert.equal(writes.length,0);});
 test('reset refuses foreign document path before deleting anything',async()=>{const {admin,m,writes}=fixture({order_documents:[{id:'doc',order_id:'order',organization_id:'etm',uploaded_by_user_id:'dealer',storage_path:'sisco/order/file'}]});await assert.rejects(resetDemo(admin,m),/path/);assert.equal(writes.length,0);});
 test('reset refuses modified goal before deleting anything',async()=>{const {admin,m,writes}=fixture({sales_goals:[{id:'goal',organization_id:'etm',target_amount:900000}]});await assert.rejects(resetDemo(admin,m),/goal/);assert.equal(writes.length,0);});
+test('reset refuses ordinary post-sale actors and linked follow-up opportunities',async()=>{
+ for(const change of [
+  {order_change_requests:[{id:'change',order_id:'order',requested_by:'normal'}]},
+  {order_events:[{id:'event',order_id:'order',actor_user_id:'normal'}]},
+  {installed_units:[{id:'unit',order_id:'order'}],opportunities:[{id:'followup',installed_unit_id:'unit'}]},
+ ]){const {admin,m,writes}=fixture(change);await assert.rejects(resetDemo(admin,m),/reset refused/);assert.equal(writes.length,0);}
+});
 test('reset deletes only scoped workflow, preserves catalog, quotes and identities',async()=>{const {admin,m,writes}=fixture();await resetDemo(admin,m);assert.ok(writes.some(w=>w.table==='orders'));assert.ok(writes.every(w=>!['quotes','customers','machines','profiles','salespeople','organization_memberships','network_devices'].includes(w.table)));assert.ok(writes.filter(w=>w.filters).every(w=>w.filters.length));assert.deepEqual(writes[0],{table:'storage',values:['etm/order/file']});});
 test('observability emits only fixed safe fields in staging',()=>{
  const logs=[];const exports={};const process={env:{SALES_NETWORK_ENV:'staging',SALES_NETWORK_OBSERVABILITY:'true'}};

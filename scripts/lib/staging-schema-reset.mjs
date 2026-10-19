@@ -3,12 +3,12 @@ import {sqlSource} from './staging-baseline.mjs';
 
 // Deliberately bounded to the reviewed history; future migrations require review.
 export function resetInventory(){
- const files=readdirSync('supabase/migrations').filter(f=>/^\d+.*\.sql$/.test(f)&&f<'20261018000037').sort();
+ const files=readdirSync('supabase/migrations').filter(f=>/^\d+.*\.sql$/.test(f)&&f<'20261019000042').sort();
  const source=files.map(sqlSource).join('\n');
  const names=pattern=>[...new Set([...source.matchAll(pattern)].map(m=>m[1]))].sort();
  return {
   tables:names(/create\s+table\s+(?:if\s+not\s+exists\s+)?public\.(\w+)/gi),
-  functions:names(/create\s+(?:or\s+replace\s+)?function\s+public\.(\w+)/gi),
+  functions:[...new Set([...names(/create\s+(?:or\s+replace\s+)?function\s+public\.(\w+)/gi),...names(/alter\s+function\s+public\.\w+\([^;]+?\)\s+rename\s+to\s+(\w+)/gi)])].sort(),
   types:names(/create\s+type\s+public\.(\w+)/gi),
   sequences:names(/create\s+sequence\s+(?:if\s+not\s+exists\s+)?public\.(\w+)/gi),
   policies:names(/create\s+policy\s+("[^"]+"|\w+)\s+on\s+storage\.objects/gi).map(s=>s.replace(/^"|"$/g,'')),
@@ -52,7 +52,7 @@ begin
  if not exists(select 1 from nahuitech_staging_reset.authorization where ref=${literal(ref)} and token=${literal(token)} and expires_at>now() and expires_at<=now()+interval '20 minutes') then raise exception 'Wrong or expired STAGING authorization';end if;
  lock table auth.users in share mode;
  if exists(select 1 from auth.users) then raise exception 'Reset refused: Auth users exist. This reset is only for pre-demo empty staging';end if;
- for r in select unnest(${array(inv.tables.filter(t=>!['machines','addons','machine_addons','machine_variants','organizations','organization_modules'].includes(t)))}) as name loop
+ for r in select unnest(${array(inv.tables.filter(t=>!['machines','addons','machine_addons','machine_variants','organizations','organization_modules','dealer_supplier_relationships'].includes(t)))}) as name loop
   if to_regclass('public.'||r.name) is not null then
    execute format('lock table public.%I in access exclusive mode',r.name);
    execute format('select exists(select 1 from public.%I)',r.name) into occupied;
@@ -60,7 +60,7 @@ begin
   end if;
  end loop;
  lock table storage.objects in share mode;
- if exists(select 1 from storage.objects where bucket_id in ('quote-pdfs','machine-images','sales-network-documents')) then raise exception 'Reset refused: project Storage files exist. Use Storage API after manual review, never DELETE storage metadata';end if;
+ if exists(select 1 from storage.objects where bucket_id in ('quote-pdfs','machine-images','sales-network-documents','network-branding')) then raise exception 'Reset refused: project Storage files exist. Use Storage API after manual review, never DELETE storage metadata';end if;
  -- Remove only the one auth hook owned by this application; preserve auth schema/users.
  if exists(select 1 from pg_trigger t join pg_proc p on p.oid=t.tgfoid join pg_namespace n on n.oid=p.pronamespace where t.tgrelid='auth.users'::regclass and t.tgname='on_auth_user_created' and (n.nspname<>'public' or p.proname<>'handle_new_user')) then raise exception 'Unknown auth trigger owner';end if;
  drop trigger if exists on_auth_user_created on auth.users;

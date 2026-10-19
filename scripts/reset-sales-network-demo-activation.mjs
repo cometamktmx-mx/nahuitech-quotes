@@ -1,0 +1,12 @@
+import {createClient} from '@supabase/supabase-js';
+import {stagingTarget,readManifest,saveManifest} from './lib/sales-network-staging.mjs';
+import {resetDemoActivation} from './lib/reset-sales-network-demo-activation.mjs';
+const {url,host,ref,secret}=stagingTarget('--allow-demo-activation-reset');
+const m=readManifest(ref);
+if(!m||m.host!==host)throw Error('Matching local seed manifest required. No writes made.');
+const admin=createClient(url,secret,{auth:{persistSession:false,autoRefreshToken:false}});
+const {code,activation_code_id}=await resetDemoActivation(admin,m);
+saveManifest(ref,{...m,activation_code_id});
+console.log('STAGING ONLY: ETM demo activation reset. Auth, profile, salesperson and commercial/demo data retained.');
+console.log('New ETM activation code (save now; replaces the previous demo code):',code);
+console.log('Reload /network in the ETM browser. Old selection cookies confer no access. Sign in with network-etm-demo@example.invalid and use the new code.');

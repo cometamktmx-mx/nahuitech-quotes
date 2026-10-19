@@ -17,20 +17,24 @@ if(!hq||!etm)throw new Error('Apply Sales Network migrations first.');
 const emails=demoEmails;
 const users={};
 for(const [kind,email] of Object.entries(emails)){
- const existing=unwrap(await admin.from('profiles').select('id').eq('full_name',`Sales Network DEMO ${kind}`)).at(0);
+ const displayName=kind==='hq'?'NAHUITECH HQ':'Vendedor DEMO ETM';
+ let existing=manifest.users[kind]?{id:manifest.users[kind]}:unwrap(await admin.from('profiles').select('id').eq('full_name',`Sales Network DEMO ${kind}`)).at(0);
+ if(!existing)existing=unwrap(await admin.from('profiles').select('id').eq('full_name',displayName)).at(0);
  if(existing){const auth=unwrap(await admin.auth.admin.getUserById(existing.id));assertDemoUser(auth.user,kind);users[kind]=existing.id;}
- else{const auth=unwrap(await admin.auth.admin.createUser({email,password,email_confirm:true,app_metadata:{sales_network_demo:'staging-v1'},user_metadata:{full_name:`Sales Network DEMO ${kind}`}}));users[kind]=auth.user.id;}
+ else{const auth=unwrap(await admin.auth.admin.createUser({email,password,email_confirm:true,app_metadata:{sales_network_demo:'staging-v1'},user_metadata:{full_name:displayName}}));users[kind]=auth.user.id;}
+ unwrap(await admin.from('profiles').update({full_name:displayName}).eq('id',users[kind]));
  manifest.users[kind]=users[kind];save();
 }
 let salesperson=unwrap(await admin.from('salespeople').select('id').eq('email',emails.dealer)).at(0)?.id;
 if(!salesperson)salesperson=unwrap(await admin.from('salespeople').insert({full_name:'Vendedor DEMO ETM',email:emails.dealer}).select('id').single()).id;
 unwrap(await admin.from('profiles').update({role:'admin',active:true}).eq('id',users.hq));
 unwrap(await admin.from('profiles').update({role:'seller',active:true,salesperson_id:salesperson}).eq('id',users.dealer));
-unwrap(await admin.from('organization_memberships').upsert([{organization_id:hq,user_id:users.hq,network_role:'NETWORK_OWNER'},{organization_id:etm,user_id:users.dealer,network_role:'SELLER'}],{onConflict:'organization_id,user_id',ignoreDuplicates:true}));
+unwrap(await admin.from('organization_memberships').upsert({organization_id:hq,user_id:users.hq,network_role:'NETWORK_OWNER',active:true},{onConflict:'organization_id,user_id'}));
 const clients={};
 for(const kind of ['hq','dealer']){
- const device=randomUUID();unwrap(await admin.from('network_devices').insert({organization_id:kind==='hq'?hq:etm,user_id:users[kind],device_public_id:device,device_name:'DEMO seed session'}));
- clients[kind]=createClient(url,process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,{global:{headers:{'x-network-device':device}},auth:{persistSession:false,autoRefreshToken:false}});
+ const device=kind==='hq'?randomUUID():null;
+ if(device)unwrap(await admin.from('network_devices').insert({organization_id:hq,user_id:users.hq,device_public_id:device,device_name:'DEMO seed session HQ'}));
+ clients[kind]=createClient(url,process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,{global:{headers:device?{'x-network-device':device}:{}},auth:{persistSession:false,autoRefreshToken:false}});
  unwrap(await clients[kind].auth.signInWithPassword({email:emails[kind],password}));
 }
 const dealer=clients.dealer;
@@ -45,10 +49,24 @@ async function makeQuote(title){const rows=await rpc(dealer,'create_quote',{p_ma
 const demoTitles=['Textiles Vega','Grupo Industrial León','Confecciones del Bajío'];
 const opportunities=[];
 for(const [index,title] of demoTitles.entries()){
- let o=unwrap(await dealer.from('opportunities').select('*').eq('organization_id',etm).eq('title',title).eq('created_by_user_id',users.dealer)).at(0);
- if(!o){const id=await rpc(dealer,'network_opportunity',{p_org:etm,p_action:'create',p_data:{title,product_interest:machine.name,salesperson_id:salesperson,customer_name:title,customer_company:'DEMO - NO COMERCIAL',customer_whatsapp:'525555555555'}});o={id,stage:'NEW'};}
- if(index<2&&!o.linked_quote_id){const quote=await makeQuote(title);await rpc(dealer,'network_opportunity',{p_org:etm,p_action:'link_quote',p_id:o.id,p_data:{quote_id:quote}});o.stage='QUOTED';}
- if(index===1&&o.stage==='QUOTED')await rpc(dealer,'network_opportunity',{p_org:etm,p_action:'stage',p_id:o.id,p_data:{stage:'NEGOTIATION'}});
+ // Staging-only fixture writes: ETM never needs Network membership/device to seed.
+ // Commercial quotes still use the unchanged seller RPC, which requires Auth/profile.
+ let o=unwrap(await admin.from('opportunities').select('*').eq('organization_id',etm).eq('title',title).eq('created_by_user_id',users.dealer)).at(0);
+ if(!o){
+  let quote=null,snapshot=null,customerId;
+  if(index<2){
+   const quoteId=await makeQuote(title);
+   quote=unwrap(await admin.from('quotes').select('*').eq('id',quoteId).single());
+   customerId=quote.customer_id;
+   const customer=unwrap(await admin.from('customers').select('id,name,company').eq('id',customerId).single());
+   const items=unwrap(await admin.from('quote_items').select('*').eq('quote_id',quoteId).order('sort_order'));
+   const quoteAddons=unwrap(await admin.from('quote_addons').select('*').eq('quote_id',quoteId));
+   snapshot={quote,customer,items,addons:quoteAddons};
+  }else customerId=unwrap(await admin.from('customers').insert({name:title,company:'DEMO - NO COMERCIAL',whatsapp:'525555555555',created_by:users.dealer}).select('id').single()).id;
+  o=unwrap(await admin.from('opportunities').insert({organization_id:etm,title,product_interest:machine.name,salesperson_id:salesperson,customer_id:customerId,owner_user_id:users.dealer,created_by_user_id:users.dealer,stage:index===0?'QUOTED':index===1?'NEGOTIATION':'NEW',linked_quote_id:quote?.id??null,estimated_value:quote?.total??null,quote_snapshot:snapshot}).select('*').single());
+  if(quote)unwrap(await admin.from('opportunity_activities').insert({organization_id:etm,opportunity_id:o.id,activity_type:'QUOTE_LINKED',body:quote.folio,created_by_user_id:users.dealer}));
+  if(index===1)unwrap(await admin.from('opportunity_activities').insert({organization_id:etm,opportunity_id:o.id,activity_type:'STAGE_CHANGE',body:'QUOTED → NEGOTIATION',created_by_user_id:users.dealer}));
+ }
  opportunities.push(o.id);if(!manifest.opportunities.includes(o.id))manifest.opportunities.push(o.id);save();
 }
 const manualTasks=[{title:'Contactar Textiles Vega',opportunity_id:opportunities[0],task_type:'FOLLOW_UP',priority:'HIGH',days:0},{title:'Programar llamada',opportunity_id:opportunities[1],task_type:'CALL',priority:'MEDIUM',days:0},{title:'Cotización próxima a vencer',opportunity_id:opportunities[0],task_type:'QUOTE_EXPIRING',priority:'HIGH',days:13}];
@@ -63,4 +81,5 @@ manifest.goals=unwrap(await admin.from('sales_goals').select('id').eq('organizat
 manifest.announcements=unwrap(await admin.from('network_announcements').select('id').eq('organization_id',etm).eq('created_by_user_id',users.hq).eq('title','Nuevo lanzamiento Nahuitech')).map(a=>a.id);
 manifest.organization_id=etm;save();
 const code=randomBytes(32).toString('hex');await rpc(clients.hq,'network_issue_code',{p_org:etm,p_hash:createHash('sha256').update(code).digest('hex')});
+manifest.activation_code_id=unwrap(await admin.from('dealer_activation_codes').select('id').eq('organization_id',etm).eq('code_hash',createHash('sha256').update(code).digest('hex')).single()).id;save();
 console.log('DEMO prepared in',host,'\nHQ:',emails.hq,'\nETM:',emails.dealer,'\nETM activation code (save now):',code,'\nNo WhatsApp messages sent. Password is the explicitly supplied demo password.');

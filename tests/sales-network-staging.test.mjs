@@ -18,6 +18,12 @@ for(const [name,change,args] of [
  ['development',{SALES_NETWORK_ENV:'development'}],['production',{SALES_NETWORK_ENV:'production'}],['missing env',{SALES_NETWORK_ENV:''}],['wrong host',{SALES_NETWORK_DEMO_ALLOW_HOST:'other.supabase.co'}],['production ref',{SALES_NETWORK_PRODUCTION_PROJECT_REF:env.SALES_NETWORK_STAGING_PROJECT_REF}],['missing production ref',{SALES_NETWORK_PRODUCTION_PROJECT_REF:''}],['http',{NEXT_PUBLIC_SUPABASE_URL:'http://abcdefghijklmnopqrst.supabase.co'}],['localhost',{NEXT_PUBLIC_SUPABASE_URL:'http://localhost:54321'}],['missing flag',{},[]],['missing key',{SUPABASE_SECRET_KEY:''}],
 ])test(`staging guard refuses ${name}`,()=>{assert.throws(()=>stagingTarget('--allow-demo-seed',{...env,...change},args??['--allow-demo-seed']));});
 test('staging guard requires dedicated reset flag',()=>{assert.throws(()=>stagingTarget('--allow-demo-reset',env,['--allow-demo-seed']));assert.equal(stagingTarget('--allow-demo-reset',env,['--allow-demo-reset']).host,env.SALES_NETWORK_DEMO_ALLOW_HOST);});
+test('activation reset has its own staging-only flag and production/host rejection',()=>{
+ const flag='--allow-demo-activation-reset';
+ assert.throws(()=>stagingTarget(flag,env,['--allow-demo-reset']));
+ for(const change of [{SALES_NETWORK_ENV:'production'},{SALES_NETWORK_PRODUCTION_PROJECT_REF:env.SALES_NETWORK_STAGING_PROJECT_REF},{SALES_NETWORK_DEMO_ALLOW_HOST:'production.supabase.co'}])assert.throws(()=>stagingTarget(flag,{...env,...change},[flag]));
+ assert.equal(stagingTarget(flag,env,[flag]).ref,env.SALES_NETWORK_STAGING_PROJECT_REF);
+});
 test('ordinary users cannot be adopted as demo accounts',()=>{assert.throws(()=>assertDemoUser({email:demoEmails.hq,app_metadata:{}},'hq'));assert.throws(()=>assertDemoUser({email:'normal@example.test',app_metadata:{sales_network_demo:'staging-v1'}},'hq'));});
 function fixture(change={}){
  const writes=[];const m={version:1,organization_id:'etm',users:{hq:'hq',dealer:'dealer'},opportunities:['opp'],goals:['goal'],announcements:['news']};

@@ -8,7 +8,7 @@ Proyecto/ref: __________ · Rama/SHA: __________ · Operador/fecha: __________
 
 - [ ] Ambas sesiones apuntan al mismo origen staging/local y a Supabase STAGING.
 - [ ] Browser A = `network-hq-demo@example.invalid` (admin + NETWORK_OWNER NAHUITECH).
-- [ ] Browser B = `network-etm-demo@example.invalid` (seller + SELLER ETM), en perfil separado.
+- [ ] Browser B = `network-etm-demo@example.invalid` (profile seller, inicialmente SIN membership Network), en perfil separado. Usar [reset de activación](sales-network-demo-entry-hotfix.md) si ya se activó.
 - [ ] Seed completado, manifiesto conservado, código ETM disponible fuera de logs compartidos.
 - [ ] Preparar tres archivos de muestra PDF/JPG/PNG ≤8 MB para OC/anticipo/saldo. No pagar ni mandar WhatsApp.
 - [ ] El build de prueba no contiene URL productiva. Revisar hostname de requests en DevTools sin copiar headers.
@@ -18,6 +18,7 @@ Proyecto/ref: __________ · Rama/SHA: __________ · Operador/fecha: __________
 | Hecho | Browser / URL | Acción exacta | Resultado esperado |
 |---|---|---|---|
 | [ ] | B /login | Iniciar sesión ETM | Sesión válida |
+| [ ] | A /network y /network/activate | Entrar como HQ | /network/hq sin código de distribuidor |
 | [ ] | B /network/activate | Código ETM → Activar acceso | Dispositivo registrado, ETM visible; no sustituye Auth |
 | [ ] | B /network | Inicio | Cinco métricas, Tu día, pipeline y meta reales |
 | [ ] | B /network/opportunities | Textiles Vega | QUOTED, cliente/vendedor visibles |

@@ -3,6 +3,7 @@ import { readFileSync,readdirSync } from 'node:fs';
 import { randomUUID,createHash } from 'node:crypto';
 import { test } from 'node:test';
 import {resetDemo} from '../scripts/lib/reset-sales-network-demo.mjs';
+import {resetDemoActivation} from '../scripts/lib/reset-sales-network-demo-activation.mjs';
 import {demoEmails} from '../scripts/lib/sales-network-staging.mjs';
 import {buildStagingBaseline} from '../scripts/lib/staging-baseline.mjs';
 import { PGlite } from '../tmp/sql-validation/node_modules/@electric-sql/pglite/dist/index.js';
@@ -235,6 +236,46 @@ test('Sales Network: isolated PostgreSQL integration, RLS and complete order lif
   assert.equal(await scalar('select count(*) from public.orders'),orderCount-1);assert.equal(await scalar('select count(*) from public.orders where id=$1',[order]),0);
   assert.equal(await scalar('select count(*) from public.quotes'),quoteCount);assert.equal(await scalar('select count(*) from public.machines'),machineCount);
   assert.equal(await scalar('select count(*) from public.sales_goals'),1);
+ });
+ await t.test('activation-only reset preserves workflow and identities; real code activates ETM twice',async()=>{
+  await db.exec('reset role');
+  let writes=0;
+  const admin={auth:{admin:{getUserById:async id=>({data:{user:{id,email:id===ids.hq?demoEmails.hq:demoEmails.dealer,app_metadata:{sales_network_demo:'staging-v1'}}}})}},from(table){
+   assert.match(table,/^[a-z_]+$/);let operation='select',single=false,filters=[],payload,ordering='';
+   const q={select(){return q;},delete(){operation='delete';return q;},update(v){operation='update';payload=v;return q;},insert(v){operation='insert';payload=v;return q;},eq(k,v){assert.match(k,/^[a-z_]+$/);filters.push([k,v]);return q;},single(){single=true;return q;},order(k,{ascending=true}={}){assert.match(k,/^[a-z_]+$/);ordering=` order by ${k} ${ascending?'asc':'desc'}`;return q;},limit(){return q;},then(resolve,reject){
+    const values=[];const bind=v=>{values.push(v);return '$'+values.length;};let sql;
+    if(operation==='select')sql=`select * from public.${table}`;
+    else if(operation==='delete')sql=`delete from public.${table}`;
+    else if(operation==='update')sql=`update public.${table} set `+Object.entries(payload).map(([k,v])=>`${k}=${bind(v)}`).join(',');
+    else sql=`insert into public.${table} (${Object.keys(payload).join(',')}) values (${Object.values(payload).map(bind).join(',')})`;
+    if(filters.length)sql+=' where '+filters.map(([k,v])=>`${k}=${bind(v)}`).join(' and ');
+    sql+=operation==='select'?ordering:' returning *';if(operation!=='select')writes++;
+    return query(sql,values).then(rows=>({data:single?rows[0]:rows})).then(resolve,reject);
+   }};return q;
+  }};
+  const manifest={version:1,organization_id:orgs.etm,users:{hq:ids.hq,dealer:ids.etm}};
+  await assert.rejects(resetDemoActivation(admin,{...manifest,organization_id:orgs.sisco}),/Only ETM/);assert.equal(writes,0);
+  await query("insert into public.organization_memberships(organization_id,user_id,network_role) values($1,$2,'SELLER')",[orgs.sisco,ids.etm]);
+  await assert.rejects(resetDemoActivation(admin,manifest),/Unexpected demo membership/);assert.equal(writes,0);
+  await query('delete from public.organization_memberships where organization_id=$1 and user_id=$2',[orgs.sisco,ids.etm]);
+  const tables=['auth.users','profiles','salespeople','organizations','opportunities','sales_tasks','sales_goals','quotes','machines','orders'];
+  const counts=async()=>Promise.all(tables.map(table=>scalar('select count(*) from '+table)));
+  const before=await counts();
+  const first=await resetDemoActivation(admin,manifest);
+  assert.equal(await scalar('select count(*) from public.organization_memberships where user_id=$1',[ids.etm]),0);
+  assert.equal(await scalar('select count(*) from public.network_devices where user_id=$1',[ids.etm]),0);
+  assert.equal(await scalar('select count(*) from public.network_activation_attempts where user_id=$1',[ids.etm]),0);
+  assert.deepEqual(await counts(),before);
+  const codeHash=createHash('sha256').update(first.code).digest('hex');assert.equal(await scalar('select code_hash from public.dealer_activation_codes where id=$1',[first.activation_code_id]),codeHash);
+  assert.equal(await scalar('select use_count from public.dealer_activation_codes where id=$1',[first.activation_code_id]),0);
+  await as('etm');assert.equal(await scalar('select public.network_access($1)',[orgs.etm]),false);
+  assert.equal((await scalar('select public.network_activate_result($1,$2,$3)',[codeHash,devices.etm,'Demo browser'])).status,'OK');
+  assert.equal(await scalar('select public.network_access($1)',[orgs.etm]),true);
+  assert.equal(await scalar('select network_role from public.organization_memberships where user_id=auth.uid()'),'SELLER');
+  await db.exec('reset role');assert.equal(await scalar('select use_count from public.dealer_activation_codes where id=$1',[first.activation_code_id]),1);
+  const second=await resetDemoActivation(admin,{...manifest,activation_code_id:first.activation_code_id});assert.equal(second.activation_code_id,first.activation_code_id);assert.notEqual(second.code,first.code);assert.deepEqual(await counts(),before);
+  await as('etm');assert.equal((await scalar('select public.network_activate_result($1,$2,$3)',[codeHash,devices.etm,'Old code'])).status,'INVALID');
+  assert.equal((await scalar('select public.network_activate_result($1,$2,$3)',[createHash('sha256').update(second.code).digest('hex'),devices.etm,'Repeat demo'])).status,'OK');
  });
  }finally{await db.close();}
 });

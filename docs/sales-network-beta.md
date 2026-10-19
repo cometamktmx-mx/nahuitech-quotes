@@ -1,5 +1,7 @@
 # DEMO DE 7 MINUTOS
 
+**Hotfix de entrada HQ/ETM:** HQ entra automáticamente sin código; ETM debe comenzar sin membership. Para repetir solo el onboarding, usar [reset de activación ETM](sales-network-demo-entry-hotfix.md).
+
 **Bootstrap corregido 19 octubre:** regenerar baseline-combined.sql con Node; ver [instrucciones](sales-network-staging-bootstrap.md).
 
 **Actualización staging:** usar el [runbook vigente](sales-network-staging-runbook.md) y el [checklist E2E real](sales-network-e2e-checklist.md). Seed/reset admiten exclusivamente staging con refs distintas y host exacto; no existe `--with-order`. Ninguna validación remota se ha ejecutado.
@@ -9,7 +11,7 @@ Preparar staging y seed con las instrucciones de abajo antes de presentar. Tener
 | Paso | Tiempo | URL | Usuario | Botón exacto / acción | Resultado esperado |
 |---|---|---|---|---|---|
 | 1. Login HQ/dealer | 0:00–0:30 | /login | HQ y ETM, perfiles separados | Iniciar sesión | Auth válido; HQ y dealer conservan sus roles |
-| 2. Activate ETM | 0:30–0:55 | /network/activate | ETM | Pegar código del seed → **Activar acceso** | Membresía activa, dispositivo registrado, entra a ETM. HQ selecciona NAHUITECH → **Entrar a organización** |
+| 2. Activate ETM | 0:30–0:55 | /network/activate | ETM | Pegar código del seed/reset → **Activar acceso** | Crea membresía SELLER y dispositivo ETM. HQ entra automáticamente a /network/hq sin código |
 | 3. Dashboard | 0:55–1:15 | /network | ETM | **Inicio** | Pipeline real, cinco métricas, Tu día y meta |
 | 4. Opportunity | 1:15–1:45 | /network/opportunities → /network/opportunities/{opportunityId} | ETM | **Textiles Vega** → completar seguimiento → **Guardar seguimiento** | Oportunidad QUOTED y actividad nueva. Elegir llamada/nota y escribir seguimiento |
 | 5. Quote | 1:45–2:05 | /network/opportunities/{opportunityId} | ETM | **Ver cotización** | Folio, cliente, fecha, vendedor e importe sell-out. Ya vinculada por seed; flujo manual disponible: Crear cotización en /seller y luego Vincular cotización |

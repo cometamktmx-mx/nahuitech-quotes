@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requireNetwork } from "@/lib/network/server";
 import { refreshSalesNetworkTasks } from "@/lib/network/tasks";
 import { TaskList } from "@/components/network/tasks";
@@ -6,7 +7,9 @@ import { Goals,Insights } from "@/components/network/insights";
 import { PageHeading,Metric,SectionHeading,EmptyState } from "@/components/network/ui";
 import { money,stages,labels,dateTime,auditLabel } from "@/lib/network/display";
 export default async function NetworkHome(){
- const {db,org,organization,owner}=await requireNetwork();await refreshSalesNetworkTasks(db,org);
+ const {db,org,organization,owner}=await requireNetwork();
+ if(owner&&organization?.organization_type==="MANUFACTURER")redirect("/network/hq");
+ await refreshSalesNetworkTasks(db,org);
  const [metrics,tasks,insights,activity,news]=await Promise.all([
   db.rpc("network_dashboard",{p_org:org}),db.from("sales_tasks").select("*").eq("organization_id",org).in("status",["OPEN","IN_PROGRESS"]).order("priority_rank").order("due_at").limit(8),
   db.rpc("network_insights",{p_org:org}),db.from("network_audit_log").select("id,action,entity_type,entity_id,created_at").eq("organization_id",org).order("created_at",{ascending:false}).limit(6),
